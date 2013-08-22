@@ -203,22 +203,30 @@
 ;    #:attributes (name)
     (pattern name:id 
              #:attr new-arg #'(name)
-             #:attr def #'(void))
+             #:attr def #'(void)
+             #:attr nested-defs #'())
     ;; need this here to avoid conflicting with arg-with-default
     (pattern e:gen-bind-no-let
              #:attr name #'e.name
              #:attr new-arg #'e.new-arg
-             #:attr def #'e.def))
-  #;(define-syntax-class let-bind
+             #:attr def #'e.def
+             #:attr nested-defs #'e.nested-defs))
+  (define-syntax-class let-bind
 ;    #:attributes (name)
     (pattern name:id 
              #:attr new-arg #'(name)
-             #:attr def #'(void))
+             #:attr def #'(void)
+             #:attr nested-defs #'()
+             #:attr definer #'define
+             #:attr ids-to-bind #'name)
     ;; need this here to avoid conflicting with arg-with-default
-    (pattern e:gen-bind-no-let
+    (pattern e:gen-bind
              #:attr name #'e.name
              #:attr new-arg #'e.new-arg
-             #:attr def #'e.def)))
+             #:attr def #'e.def
+             #:attr nested-defs #'e.nested-defs
+             #:attr definer #'e.definer
+             #:attr ids-to-bind #'e.ids-to-bind)))
 
 (provide new-define)
 (define-syntax (new-define stx)
@@ -242,11 +250,22 @@
         ?body ...))]))
 ;        (match* (?? ?header.params)
 ;                ?clause ...)))]))
-;(define-syntax (new-let stx)
-;  (syntax-parse stx
-;    [(_ (~optional loop:id) ([b:let-bind e] ...) body ...)
-;     #'(let #,@(if (attribute loop) #'(loop) #'())
-;         ([b.name e] ...) body ...)]))
+
+(provide new-let)
+(define-syntax (new-let stx)
+  (syntax-parse stx
+    ;; can't have "let-bind" class with loop
+    [(_ loop:id ([b:non-let-bind e] ...) body ...)
+     #`(let loop ([b.name e] ...) 
+         #,@#'(b.def ...)
+         #,@(append-map syntax->list (syntax->list #'(b.nested-defs ...)))
+         body ...)]
+    [(_ ([b:let-bind e] ...) body ...)
+     #`(let ()
+;         #,@(datum->syntax stx (syntax->datum #'((b.definer b.ids-to-bind e) ...)))
+         #,@#'((b.definer b.ids-to-bind e) ...)
+         #,@(datum->syntax stx (syntax->datum (datum->syntax stx (append-map syntax->list (syntax->list #'(b.nested-defs ...))))))
+         body ...)]))
 
 (define-syntax (:=v stx)
   (syntax-parse stx

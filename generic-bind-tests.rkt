@@ -57,3 +57,12 @@
 (check-equal? xxxx 11)
 (check-equal? yyyy 22)
 (check-equal? zzzz 33)
+
+(check-equal? (new-let ([x 10]) x) 10)
+(check-equal? (new-let ([x 10] [y 20]) (+ x y)) 30)
+(check-equal? (new-let ([(◇ (list x y)) (list 10 20)]) (+ x y)) 30)
+(check-equal? (new-let ([(◇ (list x y)) (list 10 20)] [(◇ (cons a b)) (cons 40 50)]) (+ x y a b)) 120)
+(check-equal? (new-let ([(≫ v1 v2) (values 10 20)]) (+ v1 v2)) 30)
+(check-equal? (new-let ([(≫ (◇ (list ab cd))) (values (list 99 88))]) (- cd ab)) -11)
+(check-equal? (new-let ([(≫ (◇ (list ab cd)) (◇ (cons ef fg))) (values (list 99 88) (cons 77 66))]) (+ (- cd ab) (- fg ef))) -22)
+(check-equal? (new-let loop ([(◇ (list x y ...)) (list 1 2 3 4 5)]) (if (null? y) x (+ x (loop y)))) 15)
