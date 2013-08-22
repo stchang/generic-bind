@@ -11,6 +11,9 @@
 (define-for-syntax (has-bind-prop? stx)
   (with-handlers ([exn:fail? (λ _ #f)])
     (syntax-property (local-expand stx 'expression null) 'bind)))
+(define-for-syntax (let-only-prop? stx)
+  (with-handlers ([exn:fail? (λ _ #f)])
+    (syntax-property (local-expand stx 'expression null) 'let-only)))
 (define-for-syntax bind-prop has-bind-prop?)
 
 (define-syntax (:=define-values stx)
@@ -80,5 +83,73 @@
 (define-syntax (:=v stx)
   (syntax-case stx ()
     [(_ x ...) (syntax-property
-                #'null
-                'bind (list #'define-values #'(x ...)))]))
+                (syntax-property
+                 #'null
+                 'bind (list #'define-values #'(x ...)))
+                'let-only #t)]))
+
+
+
+(require (for-syntax syntax/parse/experimental/template))
+
+
+;; syntax classes for `define/match`
+(begin-for-syntax
+  (define-syntax-class function-header
+    (pattern ((~or header:function-header name:id) . args:args)
+;             #:attr params
+;             (template ((?@ . (?? header.params ()))
+;                        . args.params))
+             #:attr new-header
+             (template ((?? header.new-header name)
+                        . args.new-args))
+             #:attr defs #'args.defs
+             ))
+
+  (define-syntax-class args
+    (pattern (arg:arg ...)
+;             #:attr params #'(arg.name ...)
+;             #:attr new-args #'(arg.new-arg ...))
+             #:attr new-args (template ((?@ . arg.new-arg) ...))
+             #:attr defs #'(arg.def ...))
+    (pattern (arg:arg ... . rest:id)
+;             #:attr params #'(arg.name ... rest)
+             #:attr new-args #'(arg.new-arg ... rest)
+             #:attr defs #'(arg.def ...)))
+
+  (define-splicing-syntax-class arg
+;    #:attributes (name)
+    (pattern name:id 
+             #:attr new-arg #'(name)
+             #:attr def #'(void))
+    (pattern [name:id default] 
+             #:attr new-arg #'([name default])
+             #:attr def #'(void))
+    (pattern (~seq kw:keyword name:id) 
+             #:attr new-arg #'(kw name)
+             #:attr def #'(void))
+    (pattern (~seq kw:keyword [name:id default]) 
+             #:attr new-arg #'(kw (name default))
+             #:attr def #'(void))
+    (pattern e #:fail-when (let-only-prop? #'e) 
+                           (format "can't use ~a pattern in non-let-style binding position"
+                                   (syntax->datum #'e))
+               #:when (has-bind-prop? #'e) 
+               #:with (df ids) (bind-prop #'e)
+               #:attr name (generate-temporary) 
+               #:attr new-arg #'(name)
+               #:attr def #`(df #,(datum->syntax #'e (syntax->datum #'ids)) name))
+    ))
+
+(provide new-define)
+(define-syntax (new-define stx)
+  (syntax-parse stx
+;    [(_ ?header:function-header ?clause ...)
+    [(_ ?header:function-header ?body ...)
+     (template
+;      (define ?header body ...))]))
+      (define ?header.new-header 
+        (?@ . ?header.defs)
+        ?body ...))]))
+;        (match* (?? ?header.params)
+;                ?clause ...)))]))
