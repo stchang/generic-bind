@@ -1,6 +1,8 @@
 #lang racket
 
-(require (for-syntax racket/syntax syntax/parse))
+(require (for-syntax racket/syntax 
+                     syntax/parse
+                     racket)) ; for append-map
 
 (provide (rename-out [:=define-values define-values]
                      [:=let-values let-values]
@@ -8,13 +10,16 @@
                      [:=for for])
          :=m :=v)
 
+(define-for-syntax (bind-prop stx)
+  (syntax-property (local-expand stx 'expression null) 'bind))
 (define-for-syntax (has-bind-prop? stx)
-  (with-handlers ([exn:fail? (λ _ #f)])
-    (syntax-property (local-expand stx 'expression null) 'bind)))
+  (with-handlers ([exn:fail? (λ _ #f)]) (bind-prop stx)))
+;    (syntax-property (local-expand stx 'expression null) 'bind)))
 (define-for-syntax (let-only-prop? stx)
   (with-handlers ([exn:fail? (λ _ #f)])
     (syntax-property (local-expand stx 'expression null) 'let-only)))
-(define-for-syntax bind-prop has-bind-prop?)
+(define-for-syntax (get-nested-defs stx)
+  (syntax-property (local-expand stx 'expression null) 'nested-defs))
 
 (define-syntax (:=define-values stx)
   (syntax-parse stx
@@ -73,21 +78,6 @@
      #:with (new-ids ...) (datum->syntax stx (syntax->datum #'(ids ...)))
      #'for]))
 
-(define-syntax (:=m stx)
-  (syntax-case stx ()
-    [(_ x ...) (syntax-property 
-                #'null
-                'bind (list #'match-define #'(x ...)))]))
-
-
-(define-syntax (:=v stx)
-  (syntax-case stx ()
-    [(_ x ...) (syntax-property
-                (syntax-property
-                 #'null
-                 'bind (list #'define-values #'(x ...)))
-                'let-only #t)]))
-
 
 
 (require (for-syntax syntax/parse/experimental/template))
@@ -96,7 +86,7 @@
 ;; syntax classes for `define/match`
 (begin-for-syntax
   (define-syntax-class function-header
-    (pattern ((~or header:function-header name:id) . args:args)
+    (pattern ((~or header:function-header name:id) . args:fn-args)
 ;             #:attr params
 ;             (template ((?@ . (?? header.params ()))
 ;                        . args.params))
@@ -106,22 +96,58 @@
              #:attr defs #'args.defs
              ))
 
-  (define-syntax-class args
-    (pattern (arg:arg ...)
+  (define-syntax-class fn-args
+    (pattern (arg:fn-arg ...)
 ;             #:attr params #'(arg.name ...)
 ;             #:attr new-args #'(arg.new-arg ...))
              #:attr new-args (template ((?@ . arg.new-arg) ...))
              #:attr defs #'(arg.def ...))
-    (pattern (arg:arg ... . rest:id)
+    (pattern (arg:fn-arg ... . rest:id)
 ;             #:attr params #'(arg.name ... rest)
-             #:attr new-args #'(arg.new-arg ... rest)
+             #:attr new-args #'((?@ . arg.new-arg) ... rest)
              #:attr defs #'(arg.def ...)))
 
-  (define-splicing-syntax-class arg
+  (define-syntax-class gen-bind
+    (pattern b #:when (has-bind-prop? #'b)
+               #:with e (local-expand #'b 'expression null)
+               #:with (df ids) (bind-prop-expanded #'e)
+               #:with new-e (generate-temporary)
+               #:attr definer #'df
+               #:attr ids-to-bind (datum->syntax #'b (syntax->datum #'ids))
+               #:attr name #'new-e
+               #:attr new-arg #'(name)
+               #:attr def #`(df #,(datum->syntax #'b (syntax->datum #'ids)) name)
+               #:attr nested-defs (get-nested-defs-expanded #'e)))
+  
+  (define-syntax-class gen-bind-no-let
+    (pattern e:gen-bind 
+             #:fail-when (let-only-prop? #'e)
+                         (format "can't use ~a pattern in non-let-style binding position"
+                                 (syntax->datum #'e))
+             #:attr name #'e.name
+             #:attr new-arg #'e.new-arg
+             #:attr def #'e.def
+             #:attr nested-defs #'e.nested-defs))
+    
+  
+  (define-splicing-syntax-class fn-arg
 ;    #:attributes (name)
     (pattern name:id 
              #:attr new-arg #'(name)
              #:attr def #'(void))
+    ;; need this here to avoid conflicting with arg-with-default
+    (pattern e:gen-bind-no-let
+             #:attr name #'e.name
+             #:attr new-arg #'e.new-arg
+             #:attr def #'e.def)
+    #;(pattern e #:fail-when (let-only-prop? #'e) 
+                           (format "can't use ~a pattern in non-let-style binding position"
+                                   (syntax->datum #'e))
+               #:when (has-bind-prop? #'e) 
+               #:with (df ids) (bind-prop #'e)
+               #:attr name (generate-temporary) 
+               #:attr new-arg #'(name)
+               #:attr def #`(df #,(datum->syntax #'e (syntax->datum #'ids)) name))
     (pattern [name:id default] 
              #:attr new-arg #'([name default])
              #:attr def #'(void))
@@ -131,21 +157,84 @@
     (pattern (~seq kw:keyword [name:id default]) 
              #:attr new-arg #'(kw (name default))
              #:attr def #'(void))
-    (pattern e #:fail-when (let-only-prop? #'e) 
-                           (format "can't use ~a pattern in non-let-style binding position"
-                                   (syntax->datum #'e))
-               #:when (has-bind-prop? #'e) 
-               #:with (df ids) (bind-prop #'e)
-               #:attr name (generate-temporary) 
-               #:attr new-arg #'(name)
-               #:attr def #`(df #,(datum->syntax #'e (syntax->datum #'ids)) name))
     ))
+
+
+(define-syntax (:=m stx)
+  (syntax-case stx ()
+    [(_ pat) 
+     (syntax-property
+      (syntax-property 
+       #'(void)
+       'bind (list #'match-define #'pat))
+      'nested-defs #'())]))
+
+(define-for-syntax (bind-prop-expanded stx)
+  (syntax-property stx 'bind))
+(define-for-syntax (has-bind-prop-expanded? stx)
+  (with-handlers ([exn:fail? (λ _ #f)]) (bind-prop-expanded stx)))
+;    (syntax-property (local-expand stx 'expression null) 'bind)))
+(define-for-syntax (let-only-prop-expanded? stx)
+  (with-handlers ([exn:fail? (λ _ #f)]) (syntax-property 'let-only)))
+(define-for-syntax (get-nested-defs-expanded stx)
+  (syntax-property stx 'nested-defs))
+
+(begin-for-syntax
+;  (define-syntax-class gen-bind-expanded
+;    (pattern e #:when (has-bind-prop-expanded? #'e)
+;               #:with (df ids) (bind-prop-expanded #'e)
+;               #:with new-e (generate-temporary)
+;               #:attr definer #'df
+;               #:attr ids-to-bind (datum->syntax #'e (syntax->datum #'ids))
+;               #:attr name #'new-e
+;               #:attr new-arg #'(name)
+;               #:attr def #`(df #,(datum->syntax #'e (syntax->datum #'ids)) name)))
+;  
+;  (define-syntax-class gen-bind-no-let-expanded
+;    (pattern e:gen-bind-expanded
+;             #:fail-when (let-only-prop-expanded? #'e)
+;                         (format "can't use ~a pattern in non-let-style binding position"
+;                                 (syntax->datum #'e))
+;             #:attr name #'e.name
+;             #:attr new-arg #'e.new-arg
+;             #:attr def #'e.def))
+    
+  (define-syntax-class non-let-bind
+;    #:attributes (name)
+    (pattern name:id 
+             #:attr new-arg #'(name)
+             #:attr def #'(void))
+    ;; need this here to avoid conflicting with arg-with-default
+    (pattern e:gen-bind-no-let
+             #:attr name #'e.name
+             #:attr new-arg #'e.new-arg
+             #:attr def #'e.def))
+  #;(define-syntax-class let-bind
+;    #:attributes (name)
+    (pattern name:id 
+             #:attr new-arg #'(name)
+             #:attr def #'(void))
+    ;; need this here to avoid conflicting with arg-with-default
+    (pattern e:gen-bind-no-let
+             #:attr name #'e.name
+             #:attr new-arg #'e.new-arg
+             #:attr def #'e.def)))
 
 (provide new-define)
 (define-syntax (new-define stx)
   (syntax-parse stx
+    [(_ x:id body) #'(define x body)]
+    [(_ b:gen-bind body)
+;     (printf "~a\n"
+     (datum->syntax stx
+     (syntax->datum
+     #`(begin
+        (b.definer b.ids-to-bind body)
+        #,@#'b.nested-defs)))]
+;#'(b.definer b.ids-to-bind body)]
 ;    [(_ ?header:function-header ?clause ...)
     [(_ ?header:function-header ?body ...)
+     ;(printf "~a\n" #'?header)
      (template
 ;      (define ?header body ...))]))
       (define ?header.new-header 
@@ -153,3 +242,20 @@
         ?body ...))]))
 ;        (match* (?? ?header.params)
 ;                ?clause ...)))]))
+;(define-syntax (new-let stx)
+;  (syntax-parse stx
+;    [(_ (~optional loop:id) ([b:let-bind e] ...) body ...)
+;     #'(let #,@(if (attribute loop) #'(loop) #'())
+;         ([b.name e] ...) body ...)]))
+
+(define-syntax (:=v stx)
+  (syntax-parse stx
+    [(_ x:non-let-bind ...)
+     (syntax-property
+      (syntax-property
+       (syntax-property
+        #'(void)
+        'bind (list #'define-values #'(x.name ...)))
+       'let-only #t)
+      'nested-defs #'(x.def ...) #;(append (syntax->list #'(x.def ...))
+                                           (append-map get-nested-defs (syntax->list #'(x ...)))))]))
