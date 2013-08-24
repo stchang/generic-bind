@@ -1,4 +1,4 @@
-racket-macros
+generic-bind
 =============
 
-Experimenting with Racket's macro system.
+Experimenting with a generic bind form for Racket.
