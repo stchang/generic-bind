@@ -31,10 +31,21 @@
 (check-equal? (f1 100 200) 300)
 (check-equal? (f1 100 200 #:z 300) 600)
 
+(~define (f3 . rst) rst)
+(check-equal? (f3 1 2 3) (list 1 2 3))
+(check-equal? (f3) null)
+(~define (f4 x y . rst) (cons x (cons y rst)))
+(check-equal? (f4 1 2 3 4 5 6) (list 1 2 3 4 5 6))
+(check-equal? (f4 1 2) (list 1 2))
+
 (~define (f2 ($ (list x y))) (- x y))
 (check-equal? (f2 (list 145 45)) 100)
 (~define (g1 ($ (list (list a b) y ...))) (apply + a b y))
 (check-equal? (g1 (list (list 101 202) 303)) 606)
+
+(~define (f5 ($ (list (list x y) z)) . rst) (cons x (cons y (cons z rst))))
+(check-equal? (f5 (list (list 1 2) 3)) (list 1 2 3))
+(check-equal? (f5 (list (list 1 2) 3) 4 5) (list 1 2 3 4 5))
 
 ;; test non-list pats
 (~define (gg ($ xxx)) (add1 xxx))
