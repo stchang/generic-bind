@@ -5,7 +5,7 @@
 (require (for-syntax "stx-utils.rkt"))
 
 
-(provide ~m ~v ~define)
+(provide ~m ~v ~define ~lambda (rename-out [~lambda ~λ]))
 
 ;; (define-generic-stx bind (definer ids let-only))
 
@@ -118,20 +118,20 @@
 
 
 (begin-for-syntax
-  (define-syntax-class function-header
-    (pattern ((~or header:function-header name:id) . args:fn-args)
+  (define-syntax-class def-function-header
+    (pattern ((~or header:def-function-header name:id) . args:def-fn-args)
              #:attr new-header 
                     (template ((?? header.new-header name) . args.new-args))
              #:attr defs #'args.defs))
 
   ;; new-arg needs to be spliced bc of keywords
   ;; def needs to be spliced bc some args don't require defs
-  (define-syntax-class fn-args
+  (define-syntax-class def-fn-args
     (pattern (arg:fn-arg ...)
              #:attr new-args (template ((?@ . arg.new-arg) ...))
              #:attr defs (template ((?@ . arg.def) ...)))
     (pattern (arg:fn-arg ... . rest:id)
-             #:attr new-args (template ((?@ . arg.new-arg) ... rest))
+             #:attr new-args (template ((?@ . arg.new-arg) ... . rest))
              #:attr defs (template ((?@ . arg.def) ...))))
 ;
 ;  (define-syntax-class gen-bind
@@ -195,9 +195,39 @@
        (begin (b.definer b.ids body)
               #,@#'b.nested-defs))]
     #;[(_ (f x ...) body ...) #'(define (f x ...) body ...)]
-    [(_ ?header:function-header ?body ...)
+    [(_ ?header:def-function-header ?body ...)
      (template (define ?header.new-header 
                  (?@ . ?header.defs)
                  ?body ...))]))
          
+
+(begin-for-syntax
+  (define-syntax-class lam-function-header
+    (pattern args:lam-fn-args
+             #:attr new-header #'args.new-args
+             #:attr defs #'args.defs))
+
+  ;; new-arg needs to be spliced bc of keywords
+  ;; def needs to be spliced bc some args don't require defs
+  (define-syntax-class lam-fn-args
+    (pattern (arg:fn-arg ...)
+             #:attr new-args (template ((?@ . arg.new-arg) ...))
+             #:attr defs (template ((?@ . arg.def) ...)))
+    (pattern (arg0:fn-arg arg:fn-arg ... . rest:id)
+             #:attr new-args 
+                    (template 
+                     ((?@ . arg0.new-arg) (?@ . arg.new-arg) ... . rest))
+             #:attr defs (template ((?@ . arg0.def) (?@ . arg.def) ...))))
+  ) ; end define-for-syntax
+
+(define-syntax (~lambda stx)
+  (syntax-parse stx
+    [(_ rst:id body:expr ...) (syntax/loc stx (lambda rst body ...))]
+    [(_ b:bind/non-let body:expr ...)
+     #:with x (generate-temporary)
+     (syntax/loc stx (lambda (x) (b.definer b.ids x) body ...))]
+    [(_ ?header:lam-function-header ?body ...)
+     (template (lambda ?header.new-header 
+                 (?@ . ?header.defs)
+                 ?body ...))]))
 

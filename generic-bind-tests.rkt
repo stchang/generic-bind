@@ -55,3 +55,20 @@
 (~define (gggg ($ 11111)) 22222)
 (check-exn exn:misc:match? (λ () (gggg 111))) ; match fail
 (check-equal? (gggg 11111) 22222)
+
+;; lambda tests
+
+(check-equal? ((~λ (x) x) 111) 111)
+(check-equal? ((~λ rst rst) 1 2 3) (list 1 2 3))
+(check-equal? ((~λ (x [y 0] #:z z #:a [a 10]) (+ x y z a)) 1 #:z 10) 21)
+(check-equal? ((~λ (x [y 0] #:z z #:a [a 10]) (+ x y z a)) 1 22 #:z 10) 43)
+(check-equal? ((~λ (x [y 0] #:z z #:a [a 10]) (+ x y z a)) 1 #:z 10 #:a 111) 122)
+(check-equal? ((~lambda (x [y 0] #:z z #:a [a 10]) (+ x y z a)) 1 #:z 10 #:a 111) 122)
+
+;; single arg
+(check-equal? ((~λ ($ (list x y)) (+ x y)) (list 14 56)) 70)
+(check-equal? ((~λ (~v v1 v2) (+ ~v v1 v2)) 1 2 3) 6) ;; shadow ~v
+; (~λ ((~v v1 v2)) (+ v1 v2)) ; error
+(check-equal? ((~λ (($ (list x y)) ($ (cons a b))) (+ a b x y)) 
+               (list 1 2) (cons 3 4))
+              10)
