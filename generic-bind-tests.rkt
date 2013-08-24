@@ -37,10 +37,10 @@
 (check-equal? (g1 (list (list 101 202) 303)) 606)
 
 ;; test non-list pats
-;(~define (gg ($ xxx)) (add1 xxx))
-;(check-equal? (gg 10001) 10002)
-;(~define (ggg ($ _)) 12345)
-;(check-equal? (ggg 5432) 12345)
-;(~define (gggg ($ 11111)) 22222)
-;(check-exn exn:misc:match? (λ () (gggg 111))) ; match fail
-;(check-equal? (gggg 11111) 22222)
+(~define (gg ($ xxx)) (add1 xxx))
+(check-equal? (gg 10001) 10002)
+(~define (ggg ($ _)) 12345)
+(check-equal? (ggg 5432) 12345)
+(~define (gggg ($ 11111)) 22222)
+(check-exn exn:misc:match? (λ () (gggg 111))) ; match fail
+(check-equal? (gggg 11111) 22222)

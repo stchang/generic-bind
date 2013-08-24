@@ -32,12 +32,17 @@
                #:attr ids (datum->syntax #'b (bind-ids #'expanded-b))
 ;               #:attr nested-definers (bind-nested-definers #'expanded-b)
 ;               #:attr nested-idss (datum->syntax #'b (bind-nested-idss #'expanded-b))))
-               #:attr nested-defs 
-               (datum->syntax #'b
-                 (for/list ([nested-definer (syntax->list (bind-nested-definers #'expanded-b))]
-                            [nested-ids (bind-nested-idss #'expanded-b)]
-                            [id (syntax->list #'ids)])
-                   (list nested-definer (datum->syntax #'b nested-ids) id)))))
+               #:attr nested-defs
+               (let ([ids-lst (syntax->list #'ids)])
+                 (if ids-lst ; for non-list patterns
+                     (datum->syntax #'b
+                       (for/list 
+                         ([nested-definer 
+                           (syntax->list (bind-nested-definers #'expanded-b))]
+                          [nested-ids (bind-nested-idss #'expanded-b)]
+                          [id (syntax->list #'ids)])
+                         (list nested-definer (datum->syntax #'b nested-ids) id)))
+                     #'()))))
   (define-syntax-class bind/non-let
     #:description "a generic bind instance that supports non-let contexts"
     #:auto-nested-attributes
@@ -45,6 +50,7 @@
                    (bind-let-only? #'expanded-b)
                    (format "can't use ~a pattern in non-let binding context"
                            (syntax->datum #'b))))
+                   
   #;(define-syntax-class bind/non-let
     #:description "a generic bind instance that supports non-let contexts"
     (pattern b #:with expanded-b (local-expand #'b 'expression null)
