@@ -2,7 +2,7 @@
 (require rackunit)
 (require "generic-bind.rkt")
 
-(define-syntax-rule (⋈ x ...) (~v x ...))
+(define-syntax-rule (⋈ x ...) (~vs x ...))
 (define-syntax-rule ($ x ...) (~m x ...))
 
 ;; define non-fns
@@ -67,8 +67,67 @@
 
 ;; single arg
 (check-equal? ((~λ ($ (list x y)) (+ x y)) (list 14 56)) 70)
-(check-equal? ((~λ (~v v1 v2) (+ ~v v1 v2)) 1 2 3) 6) ;; shadow ~v
-; (~λ ((~v v1 v2)) (+ v1 v2)) ; error
+(check-equal? ((~λ (~vs v1 v2) (+ ~vs v1 v2)) 1 2 3) 6) ;; shadow ~vs
+; (~λ ((~vs v1 v2)) (+ v1 v2)) ; error
 (check-equal? ((~λ (($ (list x y)) ($ (cons a b))) (+ a b x y)) 
                (list 1 2) (cons 3 4))
               10)
+(check-equal? ((~λ (x y ($ (A a b))) (+ x y a b)) 10 20 (A 30 40)) 100)
+
+;; example for spurious defines in nested generic binds
+(~define (⋈ ($ (cons x20 x21)) y22) (values (cons 56 67) 78))
+(check-equal? x20 56) (check-equal? x21 67) (check-equal? y22 78)
+
+;; named let
+(check-equal? 20
+              (~let L ([($ (list x y ...)) (list 1 2 3 4 5)] [n 4])
+                    (if (zero? n) 0
+                        (+ n x (L y (sub1 n))))))
+
+;; check named let corner cases
+;(let loop ([x 1] [x 2]) x) ; duplicate id error
+;(~let loop ([x 1] [x 2]) x) ; duplicate id error (but references define)
+(define x8 109)
+(check-equal? 109 (let loop ([x8 1] [y x8]) y))
+(check-equal? 109 (~let loop ([x8 1] [y x8]) y))
+
+;; ~let*
+(check-equal? (~let* ([x 46436] [y x]) y) 46436)
+;(check-equal? 
+(check-equal? (~let* ([($ (list x y)) (list 1010 2020)] [z (+ x y)]) z) 3030)
+(check-equal? (~let* ([(⋈ v1 v2) (values 4040 5050)] [z (+ v1 v2)]) z) 9090)
+(check-equal? (~let* ([(⋈ v3 ($ (list xy yx))) (values 202 (list 303 404))] 
+                      [z (+ v3 (- yx xy))])
+                     z)
+              303)
+(check-equal? (~let* ([x 1122] 
+                      [(⋈ ($ (cons ab bc)) ($ (list-rest y ys)))
+                       (values (cons x (* x 2)) (list x (add1 x) (sub1 x)))])
+                     (+ (- bc ab) (- y (+ (car ys) (cadr ys))))) 
+              0)
+(check-equal? (~let* ([x 101] [x 202]) x) 202)
+
+;; ~letrec*
+(require math/number-theory) ; factorial
+(check-equal? (~letrec ([x x]) x) (letrec ([x x]) x))
+(check-equal? (~letrec ([f (λ (x) (if (zero? x) 1 (* x (f (sub1 x)))))]) (f 10)) 
+              (factorial 10))
+(check-true
+ (~letrec ([evn? (λ (x) (if (zero? x) true (od? (sub1 x))))]
+           [od? (λ (x) (if (zero? x) false (evn? (sub1 x))))])
+   (evn? 10)))
+(check-true
+ (~letrec ([(⋈ evn? od?)
+            (values (λ (x) (if (zero? x) true (od? (sub1 x))))
+                    (λ (x) (if (zero? x) false (evn? (sub1 x)))))])
+   (evn? 10)))
+(check-true
+ (~letrec ([($ (list evn? od?))
+            (list (λ (x) (if (zero? x) true (od? (sub1 x))))
+                  (λ (x) (if (zero? x) false (evn? (sub1 x)))))])
+          (and (od? 101) (evn? 10))))
+(check-true
+ (~letrec ([(⋈ evn? ($ (list od?)))
+            (values (λ (x) (if (zero? x) true (od? (sub1 x))))
+                    (list (λ (x) (if (zero? x) false (evn? (sub1 x))))))])
+          (and (od? 101) (evn? 10))))
