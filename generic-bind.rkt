@@ -7,6 +7,7 @@
 (require (for-syntax "stx-utils.rkt"))
 
 ;; TODO:
+;; [o] 2013-08-26: ~let doesn't support ~vs
 ;; [o] 2013-08-24: bug: creating "bound-ids" stx prop breaks ~define
 ;;                 (as in it doesn't recognize :bind classes anymore)
 ;; [o] 2013-08-22: get rid of suprious defines for generic binds nested in
@@ -274,7 +275,7 @@
          (~define (loop x ...) body ...)
          (loop e ...))]
     [(_ ([x:id-or-bind e] ...) body ...)
-     #'not-implemented]))
+     #'((~lambda (x ...) body ...) e ...)]))
 
 (define-syntax (~let* stx)
   (syntax-parse stx

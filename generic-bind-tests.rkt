@@ -78,6 +78,18 @@
 (~define (⋈ ($ (cons x20 x21)) y22) (values (cons 56 67) 78))
 (check-equal? x20 56) (check-equal? x21 67) (check-equal? y22 78)
 
+;; ~let (2013-08-25: doesn't support values)
+;; some corner cases
+(define x55 155)
+(check-equal? (~let ([x55 (add1 x55)]) x55) 156)
+(define x56 156)
+(check-equal? (~let ([x56 157] [x57 x56]) x57) 156)
+
+(check-equal? (~let ([($ (list x58 x59)) (list 158 159)]) (list x59 x58))
+              (list 159 158))
+
+
+
 ;; named let
 (check-equal? 20
               (~let L ([($ (list x y ...)) (list 1 2 3 4 5)] [n 4])
