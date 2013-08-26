@@ -397,11 +397,11 @@
   ) ; begin-for-syntax
 (define-syntax (~for/common stx)
   (syntax-parse stx
-    [(_ combiner base (c:for-clause ...) bb:break-clause ... body:expr ...)
+    [(_ final-combiner single combiner base (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
      (let stxloop ([cs #'(c ... bb ...)])
        (syntax-parse cs
-         [() #'(begin body ...)]
+         [() #'(single (begin body ...))]
          [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
           #:with (s ...) (generate-temporaries #'(b ...))
           #:with new-loop (generate-temporary)
@@ -419,24 +419,25 @@
                     [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
                     [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
                     [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
-          #`(let new-loop ([s seq] ...)
-              (if (or (seq-empty? s) ...)
-                  base
-                  (~let ([b.new-b (seq-fst s)] ...)
-                        conditional-body)))]))
+          #`(apply final-combiner
+             (let new-loop ([s seq] ...)
+               (if (or (seq-empty? s) ...)
+                   base
+                   (~let ([b.new-b (seq-fst s)] ...)
+                         conditional-body))))]))
      #'expanded-for]))
 
 (define-syntax (~for*/common stx)
   (syntax-case stx ()
-    [(_ f base (clause ...) body ...)
+    [(_ g f h base (clause ...) body ...)
      (with-syntax 
        ([(new-clause ...)
          (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
-     #'(~for/common f base (new-clause ...) body ...))]))
-(define-syntax-rule (~for x ...) (~for/common void (void) x ...))
-(define-syntax-rule (~for/list x ...) (~for/common cons null x ...))
-(define-syntax-rule (~for* x ...) (~for*/common void (void) x ...))
-(define-syntax-rule (~for*/list x ...) (~for*/common cons null x ...))
+     #'(~for/common g f h base (new-clause ...) body ...))]))
+(define-syntax-rule (~for x ...) (~for/common void void cons null x ...))
+(define-syntax-rule (~for/list x ...) (~for/common append list cons null x ...))
+(define-syntax-rule (~for* x ...) (~for*/common void void cons null x ...))
+(define-syntax-rule (~for*/list x ...) (~for*/common append list cons null x ...))
      
 #;(define-syntax (~for/list stx)
   (syntax-parse stx
