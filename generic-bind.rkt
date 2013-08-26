@@ -20,7 +20,9 @@
 ;;                 - named ~let dup id references define
 (provide ~m ~vs $: $list $null
          ~define ~lambda (rename-out [~lambda ~λ]) ~case-lambda ~case-define
-         ~let ~let* ~letrec)
+         ~let ~let* ~letrec
+         ~for ~for/list
+         ~for* ~for*/list)
 
 ;; (define-generic-stx bind (definer letter ids let-only 
 ;;                           nested-definers nested-idss))
@@ -366,3 +368,88 @@
          (x.definer x.ids e) ...
          #,@(append-map syntax->list (syntax->list #'(x.nested-defs ...)))
          body ...)]))
+
+;; ~for -----------------------------------------------------------------------
+(define (seq-fst s) (sequence-ref s 0))
+(define (seq-rst s) (sequence-tail s 1))
+(define (seq-empty? s) (zero? (sequence-length s)))
+(begin-for-syntax
+  (define-splicing-syntax-class for-clause
+    (pattern (b:for-binder seq:expr))
+    (pattern w:when-clause)
+    (pattern br:break-clause))
+  (define-splicing-syntax-class body-or-break
+    (pattern bb:break-clause)
+    (pattern e:expr))
+  (define-syntax-class for-binder
+    (pattern b:bind #:attr new-b #'b)
+    (pattern x:id #:attr new-b #'x)
+    (pattern (x:id ...) #:attr new-b #'(~v x ...)))
+  (define-splicing-syntax-class when-or-break
+    (pattern :when-clause)
+    (pattern :break-clause))
+  (define-splicing-syntax-class when-clause
+    (pattern (~seq #:when guard:expr) #:attr test #'guard)
+    (pattern (~seq #:unless guard:expr) #:attr test #'(not guard)))
+  (define-splicing-syntax-class break-clause
+    (pattern (~seq #:break guard:expr))
+    (pattern (~seq #:final guard:expr)))
+  ) ; begin-for-syntax
+(define-syntax (~for/common stx)
+  (syntax-parse stx
+    [(_ combiner base (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with expanded-for
+     (let stxloop ([cs #'(c ... bb ...)])
+       (syntax-parse cs
+         [() #'(begin body ...)]
+         [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
+          #:with (s ...) (generate-temporaries #'(b ...))
+          #:with new-loop (generate-temporary)
+          #:with skip-it #'(new-loop (seq-rst s) ...)
+          #:with do-it #`(let ([result #,(stxloop #'(rst ...))]) (combiner result skip-it))
+          #:with its-done #'base
+          #:with one-more-time 
+            #`(let ([result #,(stxloop #'(rst ...))]) (combiner result base))
+          #:with conditional-body
+            (let whenloop ([ws (syntax->list #'((w) ...))])
+              (if (null? ws)
+                  #'do-it
+                  (syntax-parse (car ws)
+                    [((#:when guard)) #`(if guard #,(whenloop (cdr ws)) skip-it)]
+                    [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
+                    [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
+                    [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
+          #`(let new-loop ([s seq] ...)
+              (if (or (seq-empty? s) ...)
+                  base
+                  (~let ([b.new-b (seq-fst s)] ...)
+                        conditional-body)))]))
+     #'expanded-for]))
+
+(define-syntax (~for*/common stx)
+  (syntax-case stx ()
+    [(_ f base (clause ...) body ...)
+     (with-syntax 
+       ([(new-clause ...)
+         (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
+     #'(~for/common f base (new-clause ...) body ...))]))
+(define-syntax-rule (~for x ...) (~for/common void (void) x ...))
+(define-syntax-rule (~for/list x ...) (~for/common cons null x ...))
+(define-syntax-rule (~for* x ...) (~for*/common void (void) x ...))
+(define-syntax-rule (~for*/list x ...) (~for*/common cons null x ...))
+     
+#;(define-syntax (~for/list stx)
+  (syntax-parse stx
+    [(_ ([x:id-or-bind seq] ... 
+         (~optional (~seq #:when tst1) #:defaults ([tst1 #'#t]))
+         (~optional (~seq #:unless tst2) #:defaults ([tst2 #'#f])))
+        body ...)
+     #:with (s ...) (generate-temporaries #'(x ...))
+     #:with skip-body #'(loop (seq-rst s) ...)
+     #:with do-body #'(let ([result (begin body ...)]) (cons result skip-body))
+     #`(let loop ([s seq] ...)
+         (if (or (seq-empty? s) ...) 
+             null
+             (~let ([x (seq-fst s)] ...)
+               (if (and tst1 (not tst2)) do-body skip-body))))]))
+     

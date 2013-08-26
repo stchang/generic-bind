@@ -226,3 +226,47 @@
 (check-equal? (new-foldr - 0 (list 1)) (foldr - 0 (list 1)))
 (check-equal? (new-foldr - 0 (list 1 2)) -1)
 (check-equal? (new-foldr - 0 (list 1 2)) (foldr - 0 (list 1 2)))
+
+
+;; ~for -----------------------------------------------------------------------
+(check-equal? (~for/list ([($ (list x y)) '((1 2) (3 4) (5 6))]) (list y x))
+              '((2 1) (4 3) (6 5)))
+(check-equal? 
+ (~for/list 
+  ([($ (list x y)) '((1 2) (3 4))]
+   [($ (list a b)) '((5 6) (7 8))])
+  (list y x b a))
+ '((2 1 6 5) (4 3 8 7)))
+(check-equal? 
+ (~for/list 
+  ([($ (list x y)) '((1 2) (3 4))]
+   [($ (list a b)) '((5 6) (7 8))]
+   #:when (= x 1)) 
+  (list y x b a))
+ '((2 1 6 5)))
+(check-equal? 
+ (~for/list 
+  ([($ (list x y)) '((1 2) (3 4))]
+   [($ (list a b)) '((5 6) (7 8))]
+   #:unless (= x 1)) 
+  (list y x b a))
+ '((4 3 8 7)))
+(check-equal? 
+ (~for/list 
+  ([($ (list x y)) '((2 2) (1 4) (1 4))]
+   [($ (list a b)) '((5 6) (6 7) (7 8))]
+   #:when (= x 1)
+   #:unless (= a 6))
+  (list y x b a))
+ '((4 1 8 7)))
+(check-equal? (~for/list ([x '(1 2 3)] #:break (= x 2)) x) '(1))
+(check-equal? (~for/list ([x '(1 2 3)] #:final (= x 2)) x) '(1 2))
+(check-equal? (~for/list ([x '(1 2 3)]) #:break (= x 2) x) '(1))
+(check-equal? (~for/list ([x '(1 2 3)]) #:final (= x 2) x) '(1 2))
+
+(check-equal?
+ (~for/list ([x '(1 2 3)] #:when #t [y '(4 5 6)] #:when #t) (list x y))
+ '(((1 4) (1 5) (1 6)) ((2 4) (2 5) (2 6)) ((3 4) (3 5) (3 6))))
+(check-equal?
+ (~for*/list ([x '(1 2 3)] [y '(4 5 6)]) (list x y))
+ '(((1 4) (1 5) (1 6)) ((2 4) (2 5) (2 6)) ((3 4) (3 5) (3 6))))
