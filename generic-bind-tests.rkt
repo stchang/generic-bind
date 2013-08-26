@@ -143,3 +143,10 @@
             (values (λ (x) (if (zero? x) true (od? (sub1 x))))
                     (list (λ (x) (if (zero? x) false (evn? (sub1 x))))))])
           (and (od? 101) (evn? 10))))
+
+;; test list matching forms
+
+(~define (f20 ($list x y z : xs)) (+ x y z (length xs)))
+(check-equal? (f20 (list 10 20 30 40 50 60 70 80 90)) 66)
+(~define (f21 ($: x xs)) (+ x (length xs)))
+(check-equal? (f21 (list 10 20 30 40 50 60 70 80 90)) 18)

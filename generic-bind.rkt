@@ -17,7 +17,9 @@
 ;;                 automatically define accessors?
 ;; [o] 2013-08-21: fix error msgs
 ;;                 - named ~let dup id references define
-(provide ~m ~vs ~define ~lambda (rename-out [~lambda ~λ]) ~let ~let* ~letrec)
+(provide ~m ~vs $: $list
+         ~define ~lambda (rename-out [~lambda ~λ]) 
+         ~let ~let* ~letrec)
 
 ;; (define-generic-stx bind (definer letter ids let-only 
 ;;                           nested-definers nested-idss))
@@ -101,6 +103,44 @@
                 [nested-definers ,#'()]
                 [nested-idss ,null])
               #'(void))]))
+
+;; match bindings where the outer form is a list or cons
+(define-syntax-rule (match-list-define (x ... rst) e)
+  (match-define (list-rest x ... rst) e))
+(define-syntax-rule (match-list-let ([(x ... rst) e] ...) body ...) 
+  (match-let ([(list-rest x ... rst) e] ...) body ...))
+(define-syntax ($list stx)
+  (syntax-parse stx #:datum-literals (:)
+    [(_ x ... : rst) (add-syntax-properties
+                      `([definer ,#'match-list-define]
+                        [letter ,#'match-list-let]
+                        [ids ,(syntax->datum #'(x ... rst))]
+                        [let-only #f]
+                        [nested-definers ,#'()]
+                        [nested-idss ,null])
+                      #'(void))]
+    [(_ x ... : rst) (add-syntax-properties
+                      `([definer ,#'match-list-define]
+                        [letter ,#'match-list-let]
+                        [ids ,(syntax->datum #'(x ... rst))]
+                        [let-only #f]
+                        [nested-definers ,#'()]
+                        [nested-idss ,null])
+                      #'(void))]))
+(define-syntax-rule (match-cons-define (x xs) e) (match-define (cons x xs) e))
+(define-syntax-rule (match-cons-let ([(x xs) e] ...) body ...) 
+  (match-let ([(cons x xs) e] ...) body ...))
+(define-syntax ($: stx)
+  (syntax-parse stx 
+    [(_ x xs) (add-syntax-properties
+               `([definer ,#'match-cons-define]
+                 [letter ,#'match-cons-let]
+                 [ids ,(syntax->datum #'(x xs))]
+                 [let-only #f]
+                 [nested-definers ,#'()]
+                 [nested-idss ,null])
+               #'(void))]))
+  
 
 ;; values generic bind instance
 ;; - supports (one-level only) nested (non-let-restricted) generic binds
