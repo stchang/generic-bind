@@ -6,7 +6,8 @@
 (require (for-syntax "stx-utils.rkt"))
 
 ;; TODO:
-;; [o] 2013-08-26: ~let doesn't support ~vs
+;; [x] 2013-08-26: ~let doesn't support ~vs
+;;                 DONE: 2013-08-26
 ;; [o] 2013-08-24: bug: creating "bound-ids" stx prop breaks ~define
 ;;                 (as in it doesn't recognize :bind classes anymore)
 ;; [o] 2013-08-22: get rid of suprious defines for generic binds nested in
@@ -17,8 +18,8 @@
 ;;                 automatically define accessors?
 ;; [o] 2013-08-21: fix error msgs
 ;;                 - named ~let dup id references define
-(provide ~m ~vs $: $list
-         ~define ~lambda (rename-out [~lambda ~λ]) 
+(provide ~m ~vs $: $list $null
+         ~define ~lambda (rename-out [~lambda ~λ]) ~case-lambda ~case-define
          ~let ~let* ~letrec)
 
 ;; (define-generic-stx bind (definer letter ids let-only 
@@ -79,11 +80,11 @@
                           (syntax->datum #'b))))
   (define-syntax-class id-or-bind/non-let
     #:auto-nested-attributes
+    (pattern :bind/non-let #:attr name (generate-temporary))
     (pattern x:id #:attr name (generate-temporary)
                   #:attr definer #'define
                   #:attr letter #'let
-                  #:attr ids #'x)
-    (pattern :bind/non-let #:attr name (generate-temporary)))
+                  #:attr ids #'x))
   ) ;; end begin-for-syntax
 
 
@@ -105,28 +106,32 @@
               #'(void))]))
 
 ;; match bindings where the outer form is a list or cons
-(define-syntax-rule (match-list-define (x ... rst) e)
+(define-syntax-rule (match-listrest-define (x ... rst) e)
   (match-define (list-rest x ... rst) e))
-(define-syntax-rule (match-list-let ([(x ... rst) e] ...) body ...) 
+(define-syntax-rule (match-listrest-let ([(x ... rst) e] ...) body ...) 
   (match-let ([(list-rest x ... rst) e] ...) body ...))
+(define-syntax-rule (match-list-define (x ...) e)
+  (match-define (list x ...) e))
+(define-syntax-rule (match-list-let ([(x ...) e] ...) body ...) 
+  (match-let ([(list x ...) e] ...) body ...))
 (define-syntax ($list stx)
   (syntax-parse stx #:datum-literals (:)
     [(_ x ... : rst) (add-syntax-properties
-                      `([definer ,#'match-list-define]
-                        [letter ,#'match-list-let]
+                      `([definer ,#'match-listrest-define]
+                        [letter ,#'match-listrest-let]
                         [ids ,(syntax->datum #'(x ... rst))]
                         [let-only #f]
                         [nested-definers ,#'()]
                         [nested-idss ,null])
                       #'(void))]
-    [(_ x ... : rst) (add-syntax-properties
-                      `([definer ,#'match-list-define]
-                        [letter ,#'match-list-let]
-                        [ids ,(syntax->datum #'(x ... rst))]
-                        [let-only #f]
-                        [nested-definers ,#'()]
-                        [nested-idss ,null])
-                      #'(void))]))
+    [(_ x ...) (add-syntax-properties
+                `([definer ,#'match-list-define]
+                  [letter ,#'match-list-let]
+                  [ids ,(syntax->datum #'(x ...))]
+                  [let-only #f]
+                  [nested-definers ,#'()]
+                  [nested-idss ,null])
+                #'(void))]))
 (define-syntax-rule (match-cons-define (x xs) e) (match-define (cons x xs) e))
 (define-syntax-rule (match-cons-let ([(x xs) e] ...) body ...) 
   (match-let ([(cons x xs) e] ...) body ...))
@@ -140,6 +145,20 @@
                  [nested-definers ,#'()]
                  [nested-idss ,null])
                #'(void))]))
+(define-syntax-rule (match-null-define (x ...) e) ; ignore args
+  (match-define '() e))
+(define-syntax-rule (match-null-let ([(x ...) e] ...) body ...) 
+  (match-let (['() e] ...) body ...))
+(define-syntax ($null stx)
+  (syntax-case stx ()
+    [_ (add-syntax-properties
+        `([definer ,#'match-null-define]
+          [letter ,#'match-null-let]
+          [ids ,null]
+          [let-only #f]
+          [nested-definers ,#'()]
+          [nested-idss ,null])
+        #'(void))]))
   
 
 ;; values generic bind instance
@@ -185,13 +204,15 @@
   ;; def must be list to accomodate args not requiring extra defs
   (define-splicing-syntax-class fn-arg
     #:auto-nested-attributes
-    (pattern name:id 
-             #:attr new-arg #'(name)
-             #:attr def #'())
     ;; need this here to avoid conflicting with arg-with-default
+    ;; actually, this needs to be first, if I want to allow
+    ;; generic binding identifiers
     (pattern :bind/non-let
              #:attr new-arg #`(#,(generate-temporary))
              #:attr def #`((definer ids #,(car (syntax->list #'new-arg)))))
+    (pattern name:id 
+             #:attr new-arg #'(name)
+             #:attr def #'())
     (pattern [name:id default] 
              #:attr new-arg #'([name default])
              #:attr def #'())
@@ -206,11 +227,11 @@
 ;; ~define --------------------------------------------------------------------
 (define-syntax (~define stx)
   (syntax-parse stx
-    [(_ x:id body:expr) (syntax/loc stx (define x body))]
     [(_ b:bind body:expr)
      (quasisyntax/loc stx 
        (begin (b.definer b.ids body)
               #,@#'b.nested-defs))]
+    [(_ x:id body:expr) (syntax/loc stx (define x body))]
     [(_ ?header:def-function-header ?body ...)
      (template 
       (define ?header.new-header 
@@ -240,26 +261,76 @@
              #:attr defs (template ((?@ . arg0.def) (?@ . arg.def) ...))))
     (define-syntax-class id-or-bind
     #:auto-nested-attributes
+    (pattern :bind #:attr name (generate-temporary))
     (pattern x:id #:attr name (generate-temporary)
                   #:attr definer #'define
                   #:attr letter #'let
                   #:attr ids #'x
-                  #:attr nested-defs #'())
-    (pattern :bind #:attr name (generate-temporary)))
+                  #:attr nested-defs #'()))
+
+    ;; ~case-lambda syntax-classes
+    (define-syntax-class case-lam-function-header
+      (pattern args:case-lam-fn-args
+               #:attr new-header #'args.new-args
+               #:attr defs #'args.defs))
+    ;; new-arg needs to be spliced bc of keywords
+    ;; def needs to be spliced bc some args don't require defs
+    (define-syntax-class case-lam-fn-args
+      (pattern (arg:case-lam-fn-arg ...)
+               #:attr new-args (template ((?@ . arg.new-arg) ...))
+               #:attr defs (template ((?@ . arg.def) ...)))
+      (pattern (arg0:case-lam-fn-arg arg:case-lam-fn-arg ... . rest:id)
+               #:attr new-args 
+               (template 
+                ((?@ . arg0.new-arg) (?@ . arg.new-arg) ... . rest))
+               #:attr defs (template ((?@ . arg0.def) (?@ . arg.def) ...))))
+    ;; new-arg has to be list because keywords need to be spliced
+    ;; def must be list to accomodate args not requiring extra defs
+    (define-splicing-syntax-class case-lam-fn-arg
+      #:auto-nested-attributes
+      ;; need this here to avoid conflicting with arg-with-default
+      (pattern :bind/non-let
+               #:attr new-arg #`(#,(generate-temporary))
+               #:attr def #`((definer ids #,(car (syntax->list #'new-arg)))))
+      (pattern name:id 
+               #:attr new-arg #'(name)
+               #:attr def #'())
+      (pattern [name:id default] 
+               #:attr new-arg #'([name default])
+               #:attr def #'()))
   ) ; end define-for-syntax
 
 (define-syntax (~lambda stx)
   (syntax-parse stx
-    [(_ rst:id body:expr ...) (syntax/loc stx (lambda rst body ...))]
     [(_ b:bind/non-let body:expr ...)
      #:with x (generate-temporary)
      (syntax/loc stx (lambda (x) (b.definer b.ids x) body ...))]
+    [(_ rst:id body:expr ...) (syntax/loc stx (lambda rst body ...))]
     [(_ ?header:lam-function-header ?body ...)
      (template 
       (lambda ?header.new-header 
         (?@ . ?header.defs)
         ?body ...))]))
 
+(define-syntax (~case-lambda stx)
+  (syntax-parse stx
+    [(_ [?header:case-lam-function-header ?body ...] ...)
+     #:with (fn ...) (generate-temporaries #'(?header ...))
+     #:with args (generate-temporary)
+     #:with new-body 
+     (let loop ([fns (syntax->list #'(fn ...))])
+       (if (null? (cdr fns))
+           #`(apply #,(car fns) args)
+           #`(with-handlers ([exn:misc:match? (λ _ #,(loop (cdr fns)))])
+               (apply #,(car fns) args))))
+     #'(let ([fn (~lambda ?header ?body ...)] ...)
+         (λ args new-body))]))
+      ;(case-lambda [?header.new-header (?@ . ?header.defs) ?body ...] ...))]))
+(define-syntax (~case-define stx)
+  (syntax-parse stx
+    [(_ f clause ...)
+     #'(define f (~case-lambda clause ...))]))
+  
 ;; ~let -----------------------------------------------------------------------
 (define-syntax (~let stx)
   (syntax-parse stx
@@ -270,7 +341,12 @@
          (~define (loop x ...) body ...)
          (loop e ...))]
     [(_ ([x:id-or-bind e] ...) body ...)
-     #'((~lambda (x ...) body ...) e ...)]))
+;     #'((~lambda (x ...) body ...) e ...)]))
+     (with-syntax ([(new-e ...) (map syntax-local-introduce (syntax->list #'(e ...)))])
+       #`(let ()
+           (x.definer x.ids new-e) ...
+           #,@(append-map syntax->list (syntax->list #'(x.nested-defs ...)))
+           body ...))]))
 
 (define-syntax (~let* stx)
   (syntax-parse stx

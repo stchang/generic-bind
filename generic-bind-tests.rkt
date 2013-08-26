@@ -78,7 +78,9 @@
 (~define (⋈ ($ (cons x20 x21)) y22) (values (cons 56 67) 78))
 (check-equal? x20 56) (check-equal? x21 67) (check-equal? y22 78)
 
-;; ~let (2013-08-25: doesn't support values)
+;; ~let 
+;; (2013-08-25: doesn't support values)
+;; (2013-08-26: values works)
 ;; some corner cases
 (define x55 155)
 (check-equal? (~let ([x55 (add1 x55)]) x55) 156)
@@ -87,6 +89,34 @@
 
 (check-equal? (~let ([($ (list x58 x59)) (list 158 159)]) (list x59 x58))
               (list 159 158))
+
+;; values
+(check-equal? (~let ([(~vs v17 v27) (values 17 27)]) (+ v17 v27)) 44)
+(check-equal? (~let ([(~vs ($ (list x18 y18)) v18) (values (list 18 19) 20)])
+                    (+ x18 y18 v18))
+              57)
+
+;; check dup ids
+;(~let ([x 1] [x 2]) x) ; fail
+;(~let ([($ (list x y)) (list 1 2)] [x 3]) x) ; fail
+;(~let ([x 3] [($ (list x y)) (list 1 2)]) x) ; fail
+;(~let ([($ (list x y)) (list 1 2)] [($ (list x y)) (list 3 4)]) (list x y)) ; fail
+;(~let ([($ (list x y)) (list 1 2)] [(~vs x y) (list 3 4)]) (list x y)) ; fail
+;; dups in single match pat is ok
+(check-equal? (~let ([($ (list x x)) (list 2 2)]) x) 2)
+
+;; check ~let bindings cant see previous bindings
+(check-equal? (let ([x 12345]) (~let ([x 40] [y x]) y)) 12345)
+(check-equal? (let ([x 12345]) (~let ([x 40] [y 1] [z x]) z)) 12345)
+(check-equal? (let ([x 12345] [y 5432]) (~let ([x 40] [y 23] [z y]) z)) 5432)
+
+;; check rec defs fail
+;(~let ([x59 x59]) x59) ; fail
+; (~let ([f (λ (x) (if (zero? x) 1 (* x (f (sub1 x)))))]) (f 10)) ; fail
+(check-equal? (~letrec ([f (λ (x) (if (zero? x) 1 (* x (f (sub1 x)))))]) (f 10)) ; ok
+              (factorial 10))
+
+
 
 
 
@@ -150,3 +180,49 @@
 (check-equal? (f20 (list 10 20 30 40 50 60 70 80 90)) 66)
 (~define (f21 ($: x xs)) (+ x (length xs)))
 (check-equal? (f21 (list 10 20 30 40 50 60 70 80 90)) 18)
+
+
+(check-equal? ((~lambda ($: x xs) (append xs (list x))) (list 1 2 3 4 5)) (list 2 3 4 5 1))
+(check-equal? ((~lambda (f ($: x xs)) (cons (f x) xs)) add1 (list 1 2 3 4)) (list 2 2 3 4))
+(check-equal? ((~lambda (f ($list)) (f 1)) add1 null) 2)
+(check-exn exn:misc:match? (λ () ((~lambda (f ($list)) (f 1)) add1 (list 1 2 3))))
+
+;; ~case-lambda
+(define casemap1 
+  (~case-lambda [(f $null) null]
+                [(f ($: x xs)) (cons (f x) (casemap1 f xs))]))
+(check-equal? (casemap1 add1 null) null)
+(check-equal? (casemap1 add1 (list 1)) (list 2))
+(check-equal? (casemap1 add1 (list 1 2 3 4)) (list 2 3 4 5))
+
+(~case-define new-map 
+  [(f $null) null]
+  [(f ($: x xs)) (cons (f x) (new-map f xs))])
+(check-equal? (new-map add1 null) null)
+(check-equal? (new-map add1 (list 1)) (list 2))
+(check-equal? (new-map add1 (list 1 2)) (list 2 3))
+
+(~case-define new-filter 
+  [(p? $null) null]
+  [(p? ($: x xs)) (if (p? x) (cons x (new-filter p? xs)) (filter p? xs))])
+(check-equal? (new-filter even? null) null)
+(check-equal? (new-filter even? (list 1)) null)
+(check-equal? (new-filter even? (list 1 2 3 4 5)) (list 2 4))
+
+(~case-define new-foldl
+  [(f base $null) base]
+  [(f base ($: x xs)) (new-foldl f (f x base) xs)])
+(check-equal? (new-foldl - 0 null) 0)
+(check-equal? (new-foldl - 0 (list 1)) 1)
+(check-equal? (new-foldl - 0 (list 1)) (foldl - 0 (list 1)))
+(check-equal? (new-foldl - 0 (list 1 2)) 1)
+(check-equal? (new-foldl - 0 (list 1 2)) (foldl - 0 (list 1 2)))
+
+(~case-define new-foldr
+  [(f base $null) base]
+  [(f base ($: x xs)) (f x (new-foldr f base xs))])
+(check-equal? (new-foldr - 0 null) 0)
+(check-equal? (new-foldr - 0 (list 1)) 1)
+(check-equal? (new-foldr - 0 (list 1)) (foldr - 0 (list 1)))
+(check-equal? (new-foldr - 0 (list 1 2)) -1)
+(check-equal? (new-foldr - 0 (list 1 2)) (foldr - 0 (list 1 2)))
