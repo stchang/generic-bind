@@ -8,6 +8,10 @@
 
 ;; Utilities used by various tests of sequences
 
+(require rackunit)
+(provide test)
+(define-syntax-rule (test seq gen e) (check-equal? e seq))
+
 (define-syntax (test-multi-sequence stx)
   (syntax-case stx ()
     [(_ [(v ...) ...] gen)
@@ -16,25 +20,24 @@
                    [((v2 ...) ...)
                     (apply map list (map syntax->list (syntax->list #'((v ...) ...))))])
        #'(begin
-           (test `((v2 ...) ...) 'gen (for/list ([(id ...) gen])
+           (test `((v2 ...) ...) 'gen (~for/list ([(id ...) gen])
                                         (list id ...)))
-           (test-values `((v ...) ...) (lambda ()
-                                         (for/lists (id2 ...) ([(id ...) gen])
-                                           (values id ...))))
-           (test #t 'gen (for/and ([(id ...) gen])
-                           (and (member (list id ...) `((v2 ...) ...)) #t)))
-           (test (list (for/last ([(id ...) gen])
-                         (list id ...)))
-                 'gen (for/and ([(id ...) gen])
-                         (member (list id ...) `((v2 ...) ...))))
-           (test (for/first ([(id ...) gen])
-                   (list id ...))
-                 'gen (for/or ([(id ...) gen])
-                         (car (member (list id ...) `((v2 ...) ...)))))
+;           (test-values `((v ...) ...) (lambda ()
+;                                         (for/lists (id2 ...) ([(id ...) gen])
+;                                           (values id ...))))
+;           (test #t 'gen (for/and ([(id ...) gen])
+;                           (and (member (list id ...) `((v2 ...) ...)) #t)))
+;           (test (list (for/last ([(id ...) gen])
+;                         (list id ...)))
+;                 'gen (for/and ([(id ...) gen])
+;                         (member (list id ...) `((v2 ...) ...))))
+;           (test (for/first ([(id ...) gen])
+;                   (list id ...))
+;                 'gen (for/or ([(id ...) gen])
+;                         (car (member (list id ...) `((v2 ...) ...)))))
            (void)))]))
 
-(require rackunit)
-(define-syntax-rule (test seq gen e) (check-equal? e seq))
+
 (define-syntax test-sequence
   (syntax-rules ()
     [(_ [seq] gen) ; we assume that seq has at least 2 elements, and all are unique
@@ -109,5 +112,5 @@
 ;       ;; Run multi-value tests:
 ;       (test-multi-sequence [seq] gen)
        )]
-    #;[(_ seqs gen)
+    [(_ seqs gen)
      (test-multi-sequence seqs gen)]))

@@ -52,35 +52,35 @@
 (test-sequence [(65 66 67)] (in-bytes #"ZZAXBYC" 2 #f 2))
 (test-sequence [(65 66 67)] (in-bytes #"ZZAXBYCY" 2 #f 2))
 (test-sequence [(#\a #\b #\c)] (in-input-port-chars (open-input-string "abc")))
-;(test-sequence [(65 66 67)] (open-input-bytes #"ABC"))
-;(test-sequence [(65 66 67)] (in-input-port-bytes (open-input-bytes #"ABC")))
-;
-;;; Test optimized:
-;(test '(2) 'in-list-of-list (for/list ([v (in-list (list 1))]) (add1 v)))
-;(test '(0) 'in-mlist-of-mlist (for/list ([v (in-mlist (mlist 1))]) (sub1 v)))
-;
-;(test-sequence [(1 2 3)] (in-port read (open-input-string "1 2 3")))
-;(test-sequence [((123) 4)] (in-port read (open-input-string "(123) 4")))
-;(test-sequence [(65 66 67)] (in-port read-byte (open-input-string "ABC")))
-;
-;(test-sequence [("abc" "def")] (in-lines (open-input-string "abc\ndef")))
-;(test-sequence [(#"abc" #"def")] (in-bytes-lines (open-input-string "abc\ndef")))
-;
-;(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 6)))
-;(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 4) '(4 5)))
-;(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 6) '()))
-;(test-sequence [(0 1 2 3 4 5)] (in-sequences '() (in-range 4) '() '(4 5)))
-;(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 0 2) (in-range 2 4) (in-range 4 6)))
-;(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 0 2)
-;                                              (in-sequences (in-range 2 4) (in-range 4 6))))
+(test-sequence [(65 66 67)] (open-input-bytes #"ABC"))
+(test-sequence [(65 66 67)] (in-input-port-bytes (open-input-bytes #"ABC")))
+
+;; Test optimized:
+(test '(2) 'in-list-of-list (for/list ([v (in-list (list 1))]) (add1 v)))
+(test '(0) 'in-mlist-of-mlist (for/list ([v (in-mlist (mlist 1))]) (sub1 v)))
+
+(test-sequence [(1 2 3)] (in-port read (open-input-string "1 2 3")))
+(test-sequence [((123) 4)] (in-port read (open-input-string "(123) 4")))
+(test-sequence [(65 66 67)] (in-port read-byte (open-input-string "ABC")))
+
+(test-sequence [("abc" "def")] (in-lines (open-input-string "abc\ndef")))
+(test-sequence [(#"abc" #"def")] (in-bytes-lines (open-input-string "abc\ndef")))
+
+(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 6)))
+(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 4) '(4 5)))
+(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 6) '()))
+(test-sequence [(0 1 2 3 4 5)] (in-sequences '() (in-range 4) '() '(4 5)))
+(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 0 2) (in-range 2 4) (in-range 4 6)))
+(test-sequence [(0 1 2 3 4 5)] (in-sequences (in-range 0 2)
+                                             (in-sequences (in-range 2 4) (in-range 4 6))))
 ;(test-sequence [(0 1 2 3 #\a #\b #\c) (10 11 12 13 #\A #\B #\C)]
 ;                (in-sequences (in-parallel (in-range 0 4) (in-range 10 14))
 ;                              (in-parallel "abc" "ABC")))
-;;; Check empty sequences:
+;; Check empty sequences:
 ;(test '() 'empty-seq (for/list ([v (in-sequences)]) v))
 ;(test '() 'empty-seq (for/list ([v (in-sequences '())]) v))
 ;(test '() 'empty-seq (for/list ([v (in-sequences '() '())]) v))
-;
+
 ;;; use in-parallel to get a finite number of items
 ;(test-sequence [(0 1 2 3 0 1 2 3) (0 1 2 3 4 5 6 7)]
 ;                (in-parallel (in-cycle (in-range 0 4)) (in-range 0 8)))

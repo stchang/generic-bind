@@ -370,9 +370,9 @@
          body ...)]))
 
 ;; ~for -----------------------------------------------------------------------
-(define (seq-fst s) (sequence-ref s 0))
-(define (seq-rst s) (sequence-tail s 1))
-(define (seq-empty? s) (zero? (sequence-length s)))
+;(define (seq-fst s) (sequence-ref s 0))
+;(define (seq-rst s) (sequence-tail s 1))
+;(define (seq-empty? s) (zero? (sequence-length s)))
 (begin-for-syntax
   (define-splicing-syntax-class for-clause
     (pattern (b:for-binder seq:expr))
@@ -383,8 +383,10 @@
     (pattern e:expr))
   (define-syntax-class for-binder
     (pattern b:bind #:attr new-b #'b)
-    (pattern x:id #:attr new-b #'x)
-    (pattern (x:id ...) #:attr new-b #'(~v x ...)))
+    (pattern x:id #:attr new-b #'x
+                  #:attr nested-defs #'())
+    (pattern (x:id ...) #:attr new-b #'(~vs x ...)
+                        #:attr nested-defs #'()))
   (define-splicing-syntax-class when-or-break
     (pattern :when-clause)
     (pattern :break-clause))
@@ -403,9 +405,11 @@
        (syntax-parse cs
          [() #'(single (begin body ...))]
          [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
-          #:with (s ...) (generate-temporaries #'(b ...))
+;          #:with (s ...) (generate-temporaries #'(b ...))
+          #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
+          #:with (seq-next ...) (generate-temporaries #'(b ...))
           #:with new-loop (generate-temporary)
-          #:with skip-it #'(new-loop (seq-rst s) ...)
+          #:with skip-it #'(new-loop) ;;#'(new-loop (seq-rst s) ...)
           #:with do-it #`(let ([result #,(stxloop #'(rst ...))]) (combiner result skip-it))
           #:with its-done #'base
           #:with one-more-time 
@@ -420,11 +424,13 @@
                     [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
                     [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
           #`(apply final-combiner
-             (let new-loop ([s seq] ...)
-               (if (or (seq-empty? s) ...)
-                   base
-                   (~let ([b.new-b (seq-fst s)] ...)
-                         conditional-body))))]))
+             (let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
+               (let new-loop () #;([s seq] ...)
+                 (if (and (seq-not-empty?) ...)
+                     (~let ([b.new-b (seq-next)] ...)
+;                       #,@(append-map syntax->list (syntax->list #'(b.nested-defs ...)))
+                           conditional-body)
+                     base))))]))
      #'expanded-for]))
 
 (define-syntax (~for*/common stx)

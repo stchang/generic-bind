@@ -270,3 +270,19 @@
 (check-equal?
  (~for*/list ([x '(1 2 3)] [y '(4 5 6)]) (list x y))
  '((1 4) (1 5) (1 6) (2 4) (2 5) (2 6) (3 4) (3 5) (3 6)))
+
+(require racket/generator)
+(check-equal?
+ (~for/list ([($ (list x y)) (in-generator (let loop ([n 3])
+                                             (unless (zero? n)
+                                               (yield (list n (add1 n)))
+                                               (loop (sub1 n)))))])
+            (list x y))
+ '((3 4) (2 3) (1 2)))
+(check-equal?
+ (~for/list ([(~vs x y) (in-generator (let loop ([n 3])
+                                             (unless (zero? n)
+                                               (yield n (add1 n))
+                                               (loop (sub1 n)))))])
+            (list x y))
+ '((3 4) (2 3) (1 2)))
