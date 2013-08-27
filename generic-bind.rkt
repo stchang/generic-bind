@@ -22,8 +22,9 @@
          ~define ~lambda (rename-out [~lambda ~λ]) ~case-lambda ~case-define
          ~let ~let* ~letrec
          ~for ~for/list ~for/fold ~for/lists ~for/last ~for/and ~for/or 
-         ~for/first ~for/sum ~for/product ~for/vector
-         ~for* ~for*/list ~for*/vector)
+         ~for/first ~for/sum ~for/product ~for/vector ~for/hash ~for/hasheq ~for/hasheqv
+         ~for* ~for*/list ~for*/fold ~for*/lists ~for*/last ~for*/and ~for*/or
+         ~for*/first ~for*/sum ~for*/product ~for*/vector ~for*/hash ~for*/hasheq ~for*/hasheqv)
 
 (require racket/splicing)
 
@@ -400,7 +401,10 @@
     (pattern (~seq #:break guard:expr))
     (pattern (~seq #:final guard:expr)))
   ) ; begin-for-syntax
-(define-syntax (~for/common stx)
+
+(define id-fn identity)
+
+#;(define-syntax (~for/common stx)
   (syntax-parse stx
     [(_ flatten combiner base (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
@@ -452,6 +456,8 @@
            (flatten-loop (sub1 n) #`(flatten #,res)))))
      #'expanded-for]))
 
+;; sig for combiner is acc x ... -> acc
+;; acc must come first because of possible mutiple value results
 (define-syntax (~for/common/L stx) ; accum = foldl
   (syntax-parse stx
     [(_ final combiner base break? (c:for-clause ...) bb:break-clause ... body:expr ...)
@@ -460,7 +466,7 @@
      #`(let ([init-accum base])
      #,(let stxloop ([cs #'(c ... bb ...)] [accum #'init-accum])
        (syntax-parse cs
-         [() #`(combiner (begin body ...) #,accum)]
+         [() #`(call-with-values (λ () body ...) (λ results (apply combiner #,accum results)))]
          [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
           #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
           #:with (seq-next ...) (generate-temporaries #'(b ...))
@@ -491,7 +497,7 @@
 ;           (flatten-loop (sub1 n) #`(flatten #,res)))))
      #'(final expanded-for)]))
 
-(define-syntax (~for*/common stx)
+#;(define-syntax (~for*/common stx)
   (syntax-case stx ()
     [(_ g f base (clause ...) body ...)
      (with-syntax 
@@ -500,27 +506,39 @@
      #'(~for/common g f base (new-clause ...) body ...))]))
 (define-syntax (~for*/common/L stx)
   (syntax-case stx ()
-    [(_ fi comb base b? (clause ...) body ...)
+    [(_ fin comb base b? (clause ...) body ...)
      (with-syntax 
        ([(new-clause ...)
          (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
-     #'(~for/common/L fi comb base b? (new-clause ...) body ...))]))
+     #'(~for/common/L fin comb base b? (new-clause ...) body ...))]))
 
-(define-syntax-rule (~for x ...) (~for/common void void (void) x ...))
+(define-syntax-rule (~for x ...) (~for/common/L void void (void) (λ _ #f) x ...))
+(define-syntax-rule (~for* x ...) (~for*/common/L void void (void) (λ _ #f) x ...))
 (define-syntax-rule (~for/list x ...) 
-  (~for/common/L reverse cons null (λ _ #f) x ...))
-(define-syntax-rule (~for/last x ...) 
-  (~for/common/L identity (λ (y acc) y) #f (λ _ #f) x ...))
-(define-syntax-rule (~for/and x ...)
-  (~for/common/L identity (λ (y acc) (and acc y)) #t (λ (acc) (not acc)) x ...))
-(define-syntax-rule (~for/or x ...)
-  (~for/common/L identity (λ (y acc) (or acc y)) #f (λ (acc) acc) x ...))
+  (~for/common/L reverse (λ (acc y) (cons y acc)) null (λ _ #f) x ...))
+(define-syntax-rule (~for*/list x ...) 
+  (~for*/common/L reverse (λ (acc y) (cons y acc)) null (λ _ #f) x ...))
 (define-syntax-rule (~for/first x ...)
-  (~for/common/L identity (λ (y acc) y) #f (λ (acc) acc) x ...))
-(define-syntax-rule (~for/sum x ...) 
-  (~for/common/L identity + 0 (λ _ #f) x ...))
-(define-syntax-rule (~for/product x ...) 
-  (~for/common/L identity * 1 (λ _ #f) x ...))
+  (~for/common/L id-fn (λ (acc y) y) #f id-fn x ...))
+(define-syntax-rule (~for/last x ...) 
+  (~for/common/L id-fn (λ (acc y) y) #f (λ _ #f) x ...))
+(define-syntax-rule (~for*/first x ...)
+  (~for*/common/L id-fn (λ (acc y) y) #f id-fn x ...))
+(define-syntax-rule (~for*/last x ...) 
+  (~for*/common/L id-fn (λ (acc y) y) #f (λ _ #f) x ...))
+(define-syntax-rule (~for/and x ...)
+  (~for/common/L id-fn (λ (acc y) (and acc y)) #t (λ (acc) (not acc)) x ...))
+(define-syntax-rule (~for/or x ...)
+  (~for/common/L id-fn (λ (acc y) (or acc y)) #f id-fn x ...))
+(define-syntax-rule (~for*/and x ...)
+  (~for*/common/L id-fn (λ (acc y) (and acc y)) #t (λ (acc) (not acc)) x ...))
+(define-syntax-rule (~for*/or x ...)
+  (~for*/common/L id-fn (λ (acc y) (or acc y)) #f id-fn x ...))
+(define-syntax-rule (~for/sum x ...) (~for/common/L id-fn + 0 (λ _ #f) x ...))
+(define-syntax-rule (~for/product x ...) (~for/common/L id-fn * 1 (λ _ #f) x ...))
+(define-syntax-rule (~for*/sum x ...) (~for*/common/L id-fn + 0 (λ _ #f) x ...))
+(define-syntax-rule (~for*/product x ...) (~for*/common/L id-fn * 1 (λ _ #f) x ...))
+
 (define-syntax (~for/vector stx) 
   (syntax-parse stx
     [(_ (~optional (~seq (~seq #:length len) 
@@ -541,18 +559,17 @@
          (~for/common/L 
           identity
           ;; need the unless to handle when nested loops return
-          (λ (y acc) (vector-set! vec i y) (set! i (add1 i)))
+          (λ (acc y) (vector-set! vec i y) (set! i (add1 i)))
           (void)
           (λ _ (cond 
                  [(>= i vec-len)
                   (cond 
                     [(not vec-expandable?) #t]
-                    [else
-                     (define new-vec (make-vector (* vec-len 2)))
-                     (vector-copy! new-vec 0 vec 0 vec-len)
-                     (set! vec-len (* 2 vec-len))
-                     (set! vec new-vec)
-                     #f])]
+                    [else (define new-vec (make-vector (* vec-len 2)))
+                          (vector-copy! new-vec 0 vec 0 vec-len)
+                          (set! vec-len (* 2 vec-len))
+                          (set! vec new-vec)
+                          #f])]
                  [else #f]))
           x ...)
          (cond [vec-expandable?
@@ -579,7 +596,7 @@
          (define i 0)
          (~for*/common/L 
           identity
-          (λ (y acc) (vector-set! vec i y) (set! i (add1 i)))
+          (λ (acc y) (vector-set! vec i y) (set! i (add1 i)))
           (void)
           (λ _ 
             (cond 
@@ -599,6 +616,13 @@
                 (vector-copy! new-vec 0 vec 0 i)
                 new-vec]
                [else vec]))]))
+(define-syntax-rule (~for/hash x ...) (~for/common/L id-fn hash-set (hash) (λ _ #f) x ...))
+(define-syntax-rule (~for*/hash x ...) (~for*/common/L id-fn hash-set (hash) (λ _ #f) x ...))
+(define-syntax-rule (~for/hasheq x ...) (~for/common/L id-fn hash-set (hasheq) (λ _ #f) x ...))
+(define-syntax-rule (~for*/hasheq x ...) (~for*/common/L id-fn hash-set (hasheq) (λ _ #f) x ...))
+(define-syntax-rule (~for/hasheqv x ...) (~for/common/L id-fn hash-set (hasheqv) (λ _ #f) x ...))
+(define-syntax-rule (~for*/hasheqv x ...) (~for*/common/L id-fn hash-set (hasheqv) (λ _ #f) x ...))
+;; ~for/fold and ~for/lists don't use ~for/common/L because they require multiple accums
 (define-syntax (~for/fold stx) ; foldl
   (syntax-parse stx
     [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
@@ -632,6 +656,20 @@
                         conditional-body)
                       (values accum ...))))]))
      #'expanded-for]))
+(define-syntax (~for*/fold stx) ; foldl
+  (syntax-parse stx
+    [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+     (with-syntax 
+         ([(new-clause ...)
+           (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(c ...)))])
+       #'(for/fold ([accum init] ...) (new-clause ...) bb ... body ...))]))
+(define-syntax (~for*/lists stx)
+  (syntax-parse stx
+    [(_ (accum ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+     (with-syntax 
+         ([(new-clause ...)
+           (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(c ...)))])
+       #'(for/lists (accum ...) (new-clause ...) bb ... body ...))]))
 (define-syntax (~for/lists stx)
   (syntax-parse stx
     [(_ (accum ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
@@ -676,13 +714,6 @@
                               conditional-body)
                         (values z ...)))))]))
      #'expanded-for]))
-(define-syntax-rule (~for* x ...) (~for*/common void void (void) x ...))
-(define-syntax-rule (~for*/list x ...) 
-  (~for*/common/L reverse
-                cons ;  (λ (this others) (append this (car others)))
-                null
-                (λ _ #f)
-                x ...))
      
 ;#;(define-syntax (~for/list stx)
 ;  (syntax-parse stx

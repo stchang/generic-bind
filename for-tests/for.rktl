@@ -307,58 +307,69 @@
                      3.4))
   (test 2 values vector-iters))
 
-;;; Check #:when and #:unless:
-;(test (vector 0 1 2 1 2)
-;      'when-#t
-;      (for/vector #:length 5
-;                  ([x (in-range 3)]
-;                   #:when #t
-;                   [y (in-range 3)])
-;        (+ x y)))
-;(test (vector 0 1 2 2 3)
-;      'when-...
-;      (for/vector #:length 5
-;                  ([x (in-range 3)]
-;                   #:when (even? x)
-;                   [y (in-range 3)])
-;        (+ x y)))
-;(test (vector 0 1 2 1 2)
-;      'unless-#f
-;      (for/vector #:length 5
-;                  ([x (in-range 3)]
-;                   #:unless #f
-;                   [y (in-range 3)])
-;        (+ x y)))
-;(test (vector 1 2 3 -1 -1)
-;      'unless-...
-;      (for/vector #:length 5
-;                  #:fill -1
-;                  ([x (in-range 3)]
-;                   #:unless (even? x)
-;                   [y (in-range 3)])
-;        (+ x y)))
-;
-;(test #hash((a . 1) (b . 2) (c . 3)) 'mk-hash
-;      (for/hash ([v (in-naturals)]
-;                 [k '(a b c)])
-;                (values k (add1 v))))
-;(test #hasheq((a . 1) (b . 2) (c . 3)) 'mk-hasheq
-;      (for/hasheq ([v (in-naturals)]
-;                   [k '(a b c)])
-;                  (values k (add1 v))))
+(check-equal? (~for/list () 1) (list 1))
+(check-equal? (~for*/list () 2) (list 2))
+
+;; Check #:when and #:unless:
+(test (vector 0 1 2 1 2)
+      'when-#t
+      (~for/vector #:length 5
+                  ([x (in-range 3)]
+                   #:when #t
+                   [y (in-range 3)])
+        (+ x y)))
+(test (vector 0 1 2 2 3)
+      'when-...
+      (~for/vector #:length 5
+                  ([x (in-range 3)]
+                   #:when (even? x)
+                   [y (in-range 3)])
+        (+ x y)))
+(test (vector 0 1 2 1 2)
+      'unless-#f
+      (~for/vector #:length 5
+                  ([x (in-range 3)]
+                   #:unless #f
+                   [y (in-range 3)])
+        (+ x y)))
+(test (vector 1 2 3 -1 -1)
+      'unless-...
+      (~for/vector #:length 5
+                  #:fill -1
+                  ([x (in-range 3)]
+                   #:unless (even? x)
+                   [y (in-range 3)])
+        (+ x y)))
+
+(test #hash((a . 1) (b . 2) (c . 3)) 'mk-hash
+      (~for/hash ([v (in-naturals)]
+                 [k '(a b c)])
+                (values k (add1 v))))
+(test #hasheq((a . 1) (b . 2) (c . 3)) 'mk-hasheq
+      (~for/hasheq ([v (in-naturals)]
+                   [k '(a b c)])
+                  (values k (add1 v))))
+(test #hash((a . 3) (b . 3) (c . 3)) 'mk-hash
+      (~for*/hash ([k '(a b c)]
+                   [v (in-range 3)])
+                  (values k (add1 v))))
+(test #hasheq((a . 3) (b . 3) (c . 3)) 'mk-hasheq
+      (~for*/hasheq ([k '(a b c)]
+                     [v (in-range 3)])
+                    (values k (add1 v))))
 ;(test #hash((a . 1) (b . 2) (c . 3)) 'cp-hash
-;      (for/hash ([(k v) #hash((a . 1) (b . 2) (c . 3))])
+;      (~for/hash ([(k v) #hash((a . 1) (b . 2) (c . 3))])
 ;                (values k v)))
 ;(test #hash((a . 1) (b . 2) (c . 3)) 'cp-hash
-;      (for/hash ([(k v) (in-hash #hash((a . 1) (b . 2) (c . 3)))])
+;      (~for/hash ([(k v) (in-hash #hash((a . 1) (b . 2) (c . 3)))])
 ;                (values k v)))
-;(test #hash((a . a) (b . b) (c . c)) 'cp-hash
-;      (for/hash ([k (in-hash-keys #hash((a . 1) (b . 2) (c . 3)))])
-;                (values k k)))
-;(test #hash((1 . 1) (2 . 2) (3 . 3)) 'cp-hash
-;      (for/hash ([v (in-hash-values #hash((a . 1) (b . 2) (c . 3)))])
-;                (values v v)))
-;
+(test #hash((a . a) (b . b) (c . c)) 'cp-hash
+      (~for/hash ([k (in-hash-keys #hash((a . 1) (b . 2) (c . 3)))])
+                (values k k)))
+(test #hash((1 . 1) (2 . 2) (3 . 3)) 'cp-hash
+      (~for/hash ([v (in-hash-values #hash((a . 1) (b . 2) (c . 3)))])
+                (values v v)))
+
 ;(test 1 'parallel-or-first
 ;      (for/or (((a b) (in-parallel '(1 #f) '(#t #f)))) 
 ;              a))
@@ -371,28 +382,28 @@
 ;(test #f 'parallel-and-last
 ;      (for/and (((a b) (in-parallel '(#f 1) '(#t #f)))) 
 ;              a))
-;
-;(test '(11) 'in-value (for/list ([i (in-value 11)]) i))
+
+(test '(11) 'in-value (~for/list ([i (in-value 11)]) i))
 ;(let-values ([(more? next) (sequence-generate (in-value 13))])
 ;  (test #t more?)
 ;  (test 13 next)
 ;  (test #f more?))
-;
-;;; check ranges on `in-vector', especially as a value
-;(test '() 'in-empty-vector (let ([v (in-vector '#())]) (for/list ([e v]) e)))
-;(test '() 'in-empty-vector (let ([v (in-vector '#() 0)]) (for/list ([e v]) e)))
-;(test '() 'in-empty-vector (let ([v (in-vector '#() 0 0)]) (for/list ([e v]) e)))
-;(test '() 'in-empty-vector (let ([v (in-vector '#(1) 1 1)]) (for/list ([e v]) e)))
-;(test '() 'in-empty-vector (let ([v (in-vector '#(1) 0 0)]) (for/list ([e v]) e)))
-;(test '(1) 'in-empty-vector (let ([v (in-vector '#(1) 0 1)]) (for/list ([e v]) e)))
-;
-;(test '(1 2 3)
-;      'sequence-syntax-with-keywords
-;      (let ()
-;        (define (in-X #:x seq) seq)
-;        (for/list ([x (in-X #:x '(1 2 3))]) x)
-;        ;; => '(1 2 3)
-;        (define-sequence-syntax in-X* (lambda () #'in-X) (lambda (stx) #f))
-;        (for/list ([x (in-X* #:x '(1 2 3))]) x)))
-;
+
+;; check ranges on `in-vector', especially as a value
+(test '() 'in-empty-vector (let ([v (in-vector '#())]) (~for/list ([e v]) e)))
+(test '() 'in-empty-vector (let ([v (in-vector '#() 0)]) (~for/list ([e v]) e)))
+(test '() 'in-empty-vector (let ([v (in-vector '#() 0 0)]) (~for/list ([e v]) e)))
+(test '() 'in-empty-vector (let ([v (in-vector '#(1) 1 1)]) (~for/list ([e v]) e)))
+(test '() 'in-empty-vector (let ([v (in-vector '#(1) 0 0)]) (~for/list ([e v]) e)))
+(test '(1) 'in-empty-vector (let ([v (in-vector '#(1) 0 1)]) (~for/list ([e v]) e)))
+
+(test '(1 2 3)
+      'sequence-syntax-with-keywords
+      (let ()
+        (define (in-X #:x seq) seq)
+        (~for/list ([x (in-X #:x '(1 2 3))]) x)
+        ;; => '(1 2 3)
+        (define-sequence-syntax in-X* (lambda () #'in-X) (lambda (stx) #f))
+        (~for/list ([x (in-X* #:x '(1 2 3))]) x)))
+
 ;;(report-errs)
