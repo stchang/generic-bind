@@ -21,7 +21,8 @@
 (provide ~m ~vs $: $list $null
          ~define ~lambda (rename-out [~lambda ~λ]) ~case-lambda ~case-define
          ~let ~let* ~letrec
-         ~for ~for/list
+         ~for ~for/list ~for/fold ~for/lists ~for/last ~for/and ~for/or 
+         ~for/first ~for/sum ~for/product
          ~for* ~for*/list)
 
 ;; (define-generic-stx bind (definer letter ids let-only 
@@ -399,20 +400,33 @@
   ) ; begin-for-syntax
 (define-syntax (~for/common stx)
   (syntax-parse stx
-    [(_ final-combiner single combiner base (c:for-clause ...) bb:break-clause ... body:expr ...)
+    [(_ flatten combiner base (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
+     (let ([depth 0])
+       (define res
      (let stxloop ([cs #'(c ... bb ...)])
        (syntax-parse cs
-         [() #'(single (begin body ...))]
+         [() #'(begin body ...)]
          [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
 ;          #:with (s ...) (generate-temporaries #'(b ...))
           #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
           #:with (seq-next ...) (generate-temporaries #'(b ...))
           #:with new-loop (generate-temporary)
           #:with skip-it #'(new-loop) ;;#'(new-loop (seq-rst s) ...)
-          #:with do-it #`(let ([result #,(stxloop #'(rst ...))]) (combiner result skip-it))
+          #:with do-it 
+;            #`(call-with-values 
+;               (λ () #,(stxloop #'(rst ...)))
+;               (λ this-iter (call-with-values 
+;                        (λ () skip-it)
+;                        (λ other-iters (combiner this-iter other-iters)))))
+          #`(let ([result #,(stxloop #'(rst ...))]) (combiner result skip-it))
           #:with its-done #'base
           #:with one-more-time 
+;            #`(call-with-values 
+;               (λ () #,(stxloop #'(rst ...)))
+;               (λ this-iter (call-with-values 
+;                             (λ () base)
+;                             (λ other-iters (combiner this-iter other-iters)))))
             #`(let ([result #,(stxloop #'(rst ...))]) (combiner result base))
           #:with conditional-body
             (let whenloop ([ws (syntax->list #'((w) ...))])
@@ -423,40 +437,178 @@
                     [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
                     [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
                     [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
-          #`(apply final-combiner
-             (let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
-               (let new-loop () #;([s seq] ...)
+            (set! depth (add1 depth))
+          #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
+               (let new-loop ()
                  (if (and (seq-not-empty?) ...)
                      (~let ([b.new-b (seq-next)] ...)
 ;                       #,@(append-map syntax->list (syntax->list #'(b.nested-defs ...)))
                            conditional-body)
-                     base))))]))
+                     base)))])))
+       (let flatten-loop ([n (- depth 2)] [res res])
+         (if (<= n 0) res
+           (flatten-loop (sub1 n) #`(apply flatten #,res)))))
+     #'expanded-for]))
+
+(define-syntax (~for/common/L stx) ; accum = foldl
+  (syntax-parse stx
+    [(_ flatten combiner base break? (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with expanded-for
+     (let ([depth 0])
+       (define res
+     (let stxloop ([cs #'(c ... bb ...)])
+       (syntax-parse cs
+         [() #'(begin body ...)]
+         [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
+          #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
+          #:with (seq-next ...) (generate-temporaries #'(b ...))
+          #:with new-loop (generate-temporary)
+          #:with accum (generate-temporary)
+          #:with skip-it #'(new-loop accum)
+          #:with do-it 
+            #`(new-loop (combiner #,(stxloop #'(rst ...)) accum))
+          #:with its-done #'accum
+          #:with one-more-time #`(combiner #,(stxloop #'(rst ...)) accum)
+          #:with conditional-body
+            (let whenloop ([ws (syntax->list #'((w) ...))])
+              (if (null? ws)
+                  #'do-it
+                  (syntax-parse (car ws)
+                    [((#:when guard)) #`(if guard #,(whenloop (cdr ws)) skip-it)]
+                    [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
+                    [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
+                    [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
+            (set! depth (add1 depth))
+          #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
+               (let new-loop ([accum base])
+                 (if (and (seq-not-empty?) ... (not (break? accum)))
+                     (~let ([b.new-b (seq-next)] ...)
+;                       #,@(append-map syntax->list (syntax->list #'(b.nested-defs ...)))
+                           conditional-body)
+                     accum)))])))
+       (let flatten-loop ([n (- depth 2)] [res res])
+         (if (<= n 0) res
+           (flatten-loop (sub1 n) #`(apply flatten #,res)))))
      #'expanded-for]))
 
 (define-syntax (~for*/common stx)
   (syntax-case stx ()
-    [(_ g f h base (clause ...) body ...)
+    [(_ g f base (clause ...) body ...)
      (with-syntax 
        ([(new-clause ...)
          (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
-     #'(~for/common g f h base (new-clause ...) body ...))]))
-(define-syntax-rule (~for x ...) (~for/common void void cons null x ...))
-(define-syntax-rule (~for/list x ...) (~for/common append list cons null x ...))
-(define-syntax-rule (~for* x ...) (~for*/common void void cons null x ...))
-(define-syntax-rule (~for*/list x ...) (~for*/common append list cons null x ...))
-     
-#;(define-syntax (~for/list stx)
+     #'(~for/common g f base (new-clause ...) body ...))]))
+
+(define-syntax-rule (~for x ...) (~for/common void void (void) x ...))
+(define-syntax-rule (~for/list x ...) (~for/common append cons null x ...))
+(define-syntax-rule (~for/last x ...) 
+  (~for/common/L identity (λ (y acc) y) #f (λ _ #f) x ...))
+(define-syntax-rule (~for/and x ...)
+  (~for/common/L identity (λ (y acc) (and acc y)) #t (λ (acc) (not acc)) x ...))
+(define-syntax-rule (~for/or x ...)
+  (~for/common/L identity (λ (y acc) (or acc y)) #f (λ (acc) acc) x ...))
+(define-syntax-rule (~for/first x ...)
+  (~for/common/L identity (λ (y acc) y) #f (λ (acc) acc) x ...))
+(define-syntax-rule (~for/sum x ...) 
+  (~for/common/L identity + 0 (λ _ #f) x ...))
+(define-syntax-rule (~for/product x ...) 
+  (~for/common/L identity * 1 (λ _ #f) x ...))
+(define-syntax (~for/fold stx) ; foldl
   (syntax-parse stx
-    [(_ ([x:id-or-bind seq] ... 
-         (~optional (~seq #:when tst1) #:defaults ([tst1 #'#t]))
-         (~optional (~seq #:unless tst2) #:defaults ([tst2 #'#f])))
-        body ...)
-     #:with (s ...) (generate-temporaries #'(x ...))
-     #:with skip-body #'(loop (seq-rst s) ...)
-     #:with do-body #'(let ([result (begin body ...)]) (cons result skip-body))
-     #`(let loop ([s seq] ...)
-         (if (or (seq-empty? s) ...) 
-             null
-             (~let ([x (seq-fst s)] ...)
-               (if (and tst1 (not tst2)) do-body skip-body))))]))
+    [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with expanded-for
+     (let stxloop ([cs #'(c ... bb ...)])
+       (syntax-parse cs
+         [() #'(begin body ...)]
+         [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
+          #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
+          #:with (seq-next ...) (generate-temporaries #'(b ...))
+          #:with new-loop (generate-temporary)
+          #:with skip-it #'(new-loop accum ...)
+          #:with do-it 
+            #`(call-with-values (λ () #,(stxloop #'(rst ...))) new-loop)
+          #:with its-done #'(values accum ...)
+          #:with one-more-time 
+            #`(call-with-values (λ () #,(stxloop #'(rst ...))) values)
+          #:with conditional-body
+            (let whenloop ([ws (syntax->list #'((w) ...))])
+              (if (null? ws)
+                  #'do-it
+                  (syntax-parse (car ws)
+                    [((#:when guard)) #`(if guard #,(whenloop (cdr ws)) skip-it)]
+                    [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
+                    [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
+                    [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
+            #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
+                (let new-loop ([accum init] ...)
+                  (if (and (seq-not-empty?) ...)
+                      (~let ([b.new-b (seq-next)] ...)
+                        conditional-body)
+                      (values accum ...))))]))
+     #'expanded-for]))
+(define-syntax (~for/lists stx)
+  (syntax-parse stx
+    [(_ (accum ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with expanded-for
+     (let stxloop ([cs #'(c ... bb ...)])
+       (syntax-parse cs
+         [() #'(begin body ...)]
+         [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
+          #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
+          #:with (seq-next ...) (generate-temporaries #'(b ...))
+          #:with (x ...) (generate-temporaries #'(accum ...))
+          #:with (y ...) (generate-temporaries #'(accum ...))
+          #:with (z ...) (generate-temporaries #'(accum ...))
+          #:with new-loop (generate-temporary)
+          #:with skip-it #'(new-loop)
+          #:with do-it 
+            #`(call-with-values 
+               (λ () #,(stxloop #'(rst ...))) 
+               (λ (x ...) 
+                 (call-with-values 
+                  (λ () (new-loop))
+                  (λ (y ...) (values (cons x y) ...)))))
+          #:with its-done #'(values z ...)
+          #:with one-more-time 
+            #`(call-with-values
+               (λ () #,(stxloop #'(rst ...)))
+               (λ (x ...) (values (cons x y) ...)))
+          #:with conditional-body
+            (let whenloop ([ws (syntax->list #'((w) ...))])
+              (if (null? ws)
+                  #'do-it
+                  (syntax-parse (car ws)
+                    [((#:when guard)) #`(if guard #,(whenloop (cdr ws)) skip-it)]
+                    [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
+                    [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
+                    [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
+            #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
+                (let ([z null] ...)
+                  (let new-loop ()
+                    (if (and (seq-not-empty?) ...)
+                        (~let ([b.new-b (seq-next)] ...)
+                              conditional-body)
+                        (values z ...)))))]))
+     #'expanded-for]))
+(define-syntax-rule (~for* x ...) (~for*/common void void (void) x ...))
+(define-syntax-rule (~for*/list x ...) 
+  (~for*/common append
+              cons ;  (λ (this others) (append this (car others)))
+                null
+                x ...))
+     
+;#;(define-syntax (~for/list stx)
+;  (syntax-parse stx
+;    [(_ ([x:id-or-bind seq] ... 
+;         (~optional (~seq #:when tst1) #:defaults ([tst1 #'#t]))
+;         (~optional (~seq #:unless tst2) #:defaults ([tst2 #'#f])))
+;        body ...)
+;     #:with (s ...) (generate-temporaries #'(x ...))
+;     #:with skip-body #'(loop (seq-rst s) ...)
+;     #:with do-body #'(let ([result (begin body ...)]) (cons result skip-body))
+;     #`(let loop ([s seq] ...)
+;         (if (or (seq-empty? s) ...) 
+;             null
+;             (~let ([x (seq-fst s)] ...)
+;               (if (and tst1 (not tst2)) do-body skip-body))))]))
      

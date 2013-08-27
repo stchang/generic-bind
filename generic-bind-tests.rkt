@@ -287,3 +287,14 @@
 ;                                          (loop (sub1 n)))))])
 ;            (list x y))
 ; '((3 4) (2 3) (1 2)))
+
+;; for/fold
+(check-equal?
+ (~for/fold ([sum 0]) ([x '(1 2 3 4 5 6)]) (+ x sum))
+ 21)
+
+(check-false (~for/and ([x (list #t #f #t)]) (displayln x) x))
+;; should print
+;#t
+;#f
+;#f

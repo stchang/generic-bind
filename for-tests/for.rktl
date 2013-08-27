@@ -77,9 +77,9 @@
 ;                (in-sequences (in-parallel (in-range 0 4) (in-range 10 14))
 ;                              (in-parallel "abc" "ABC")))
 ;; Check empty sequences:
-;(test '() 'empty-seq (for/list ([v (in-sequences)]) v))
-;(test '() 'empty-seq (for/list ([v (in-sequences '())]) v))
-;(test '() 'empty-seq (for/list ([v (in-sequences '() '())]) v))
+(test '() 'empty-seq (~for/list ([v (in-sequences)]) v))
+(test '() 'empty-seq (~for/list ([v (in-sequences '())]) v))
+(test '() 'empty-seq (~for/list ([v (in-sequences '() '())]) v))
 
 ;;; use in-parallel to get a finite number of items
 ;(test-sequence [(0 1 2 3 0 1 2 3) (0 1 2 3 4 5 6 7)]
@@ -91,40 +91,40 @@
 ;;; `in-cycle' accepts 0 arguments, but it never produces a value if asked:
 ;(test #t sequence? (in-cycle))
 ;(test #t sequence? (in-cycle '()))
-;
+
 ;(test-sequence [(0 1 2) (a b c)] (in-parallel (in-range 3) (in-list '(a b c))))
 ;(test-sequence [(0 1 2) (a b c)] (in-parallel (in-range 10) (in-list '(a b c))))
 ;(test-sequence [(0 1 2) (a b c)] (in-parallel (in-range 3) (in-list '(a b c d))))
 ;(test-sequence [(0 1 2) (a b c)] (in-parallel (in-range 3) '(a b c)))
-;
-;(test-sequence [(a b c)] (stop-after (in-list '(a b c d e)) (lambda (x) (equal? x 'c))))
-;(test-sequence [(a b c)] (stop-before (in-list '(a b c d e)) (lambda (x) (equal? x 'd))))
-;(test-sequence [(3 4 5)] (stop-before (in-naturals 3) (lambda (x) (= x 6))))
-;
+
+(test-sequence [(a b c)] (stop-after (in-list '(a b c d e)) (lambda (x) (equal? x 'c))))
+(test-sequence [(a b c)] (stop-before (in-list '(a b c d e)) (lambda (x) (equal? x 'd))))
+(test-sequence [(3 4 5)] (stop-before (in-naturals 3) (lambda (x) (= x 6))))
+
 ;(test-sequence [(a b c) (0 1 2)] (in-indexed '(a b c)))
-;
+
 ;(let ()
 ;  (define (counter) (define n 0) (lambda ([d 1]) (set! n (+ d n)) n))
-;  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter))] [y (in-range 4)]) x))
-;  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter))] #:break (= x 5)) x))
-;  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter) 5)]) x))
+;  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter))] [y (in-range 4)]) x))
+;  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter))] #:break (= x 5)) x))
+;  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter) 5)]) x))
 ;  (test-sequence [(1/2 1 3/2 2 5/2 3 7/2 4 9/2)]
-;    (for/list ([x (in-producer (counter) 5 1/2)]) x)))
-;
-;(test-sequence [(1 2 3 4 5)]
-;  (parameterize ([current-input-port (open-input-string "1 2 3\n4 5")])
-;    (for/list ([i (in-producer read eof)]) i)))
-;(test-sequence [(1 2 3 4 5)]
-;  (for/list ([i (in-producer read eof (open-input-string "1 2 3\n4 5"))]) i))
-;(test-sequence [("1 2 3" "4 5")]
-;  (for/list ([i (in-producer read-line eof-object? (open-input-string "1 2 3\n4 5"))]) i))
-;(test-sequence [((1 2) (3 4) (5 ,eof))]
-;  (for/list ([(i j)
-;              (in-producer (lambda (p) (values (read p) (read p)))
-;                           (lambda (x y) (and (eof-object? x) (eof-object? y)))
-;                           (open-input-string "1 2 3\n4 5"))])
-;    (list i j)))
-;
+;    (~for/list ([x (in-producer (counter) 5 1/2)]) x)))
+
+(test-sequence [(1 2 3 4 5)]
+  (parameterize ([current-input-port (open-input-string "1 2 3\n4 5")])
+    (~for/list ([i (in-producer read eof)]) i)))
+(test-sequence [(1 2 3 4 5)]
+  (~for/list ([i (in-producer read eof (open-input-string "1 2 3\n4 5"))]) i))
+(test-sequence [("1 2 3" "4 5")]
+  (~for/list ([i (in-producer read-line eof-object? (open-input-string "1 2 3\n4 5"))]) i))
+#;(test-sequence [((1 2) (3 4) (5 ,eof))]
+  (~for/list ([(i j)
+              (in-producer (lambda (p) (values (read p) (read p)))
+                           (lambda (x y) (and (eof-object? x) (eof-object? y)))
+                           (open-input-string "1 2 3\n4 5"))])
+    (list i j)))
+
 ;(let ([five-seq
 ;       (lambda (pos pre post)
 ;         (test-sequence [(1 2 3 4 5)]
@@ -173,23 +173,23 @@
 ;             (lambda (pos val1 val2) (not (string=? val2 "4")))))
 ;
 ;
-;(test '(1 2 3)
-;      'three
-;      (for/list ([i 10])
-;        #:break (= i 3)
-;        (add1 i)))
-;(test '(1 2 3 4)
-;      'three
-;      (for/list ([i 10])
-;        #:final (= i 3)
-;        (add1 i)))
-;
-;;; Make sure that breaking a sequence stops before consuming another element:
+(test '(1 2 3)
+      'three
+      (~for/list ([i 10])
+        #:break (= i 3)
+        (add1 i)))
+(test '(1 2 3 4)
+      'three
+      (~for/list ([i 10])
+        #:final (= i 3)
+        (add1 i)))
+
+;; Make sure that breaking a sequence stops before consuming another element:
 ;(test '(("1" "2" "3" "4" "5" "6" "7" "8" "9") . 10)
 ;      'producer
 ;      (let ([c 0])
 ;        (cons
-;         (for/list ([i (in-producer (lambda () (set! c (add1 c)) c))])
+;         (~for/list ([i (in-producer (lambda () (set! c (add1 c)) c))])
 ;           #:break (= i 10)
 ;           (number->string i))
 ;         c)))
@@ -197,12 +197,12 @@
 ;      'producer
 ;      (let ([c 0])
 ;        (cons
-;         (for*/list ([j '(0)]
+;         (~for*/list ([j '(0)]
 ;                     [i (in-producer (lambda () (set! c (add1 c)) c))])
 ;           #:break (= i 10)
 ;           (number->string i))
 ;         c)))
-;
+
 ;;; Basic sanity checks.
 ;(test '#(1 2 3 4) 'for/vector (for/vector ((i (in-range 4))) (+ i 1)))
 ;(test '#(1 2 3 4) 'for/vector-fast (for/vector #:length 4 ((i (in-range 4))) (+ i 1)))
