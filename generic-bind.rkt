@@ -454,23 +454,22 @@
 
 (define-syntax (~for/common/L stx) ; accum = foldl
   (syntax-parse stx
-    [(_ flatten combiner base break? (c:for-clause ...) bb:break-clause ... body:expr ...)
+    [(_ final combiner base break? (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with init-accum (generate-temporary)
      #:with expanded-for
-     (let ([depth 0])
-       (define res
-     (let stxloop ([cs #'(c ... bb ...)])
+     #`(let ([init-accum base])
+     #,(let stxloop ([cs #'(c ... bb ...)] [accum #'init-accum])
        (syntax-parse cs
-         [() #'(begin body ...)]
+         [() #`(combiner (begin body ...) #,accum)]
          [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
           #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
           #:with (seq-next ...) (generate-temporaries #'(b ...))
           #:with new-loop (generate-temporary)
-          #:with accum (generate-temporary)
-          #:with skip-it #'(new-loop accum)
-          #:with do-it 
-            #`(new-loop (combiner #,(stxloop #'(rst ...)) accum))
-          #:with its-done #'accum
-          #:with one-more-time #`(combiner #,(stxloop #'(rst ...)) accum)
+          #:with new-accum (generate-temporary)
+          #:with skip-it #'(new-loop new-accum)
+          #:with do-it #`(new-loop #,(stxloop #'(rst ...) #'new-accum))
+          #:with its-done #'new-accum
+          #:with one-more-time (stxloop #'(rst ...) #'new-accum)
           #:with conditional-body
             (let whenloop ([ws (syntax->list #'((w) ...))])
               (if (null? ws)
@@ -480,19 +479,17 @@
                     [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
                     [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
                     [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
-            (set! depth (add1 depth))
-          #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
-               (let new-loop ([accum base])
-                 (if (and (seq-not-empty?) ... (not (break? accum)))
+            #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
+                (let new-loop ([new-accum #,accum])
+                 (if (and (seq-not-empty?) ... (not (break? new-accum)))
                      (~let ([b.new-b (seq-next)] ...)
 ;                       #,@(append-map syntax->list (syntax->list #'(b.nested-defs ...)))
                            conditional-body)
-                     accum)))])))
-       (printf "res\n~a\n" (syntax->datum res))
-       (let flatten-loop ([n (- depth 2)] [res res])
-         (if (<= n 0) res
-           (flatten-loop (sub1 n) #`(flatten #,res)))))
-     #'expanded-for]))
+                     new-accum)))])))
+;       (let flatten-loop ([n (- depth 2)] [res res])
+;         (if (<= n 0) res
+;           (flatten-loop (sub1 n) #`(flatten #,res)))))
+     #'(final expanded-for)]))
 
 (define-syntax (~for*/common stx)
   (syntax-case stx ()
@@ -503,14 +500,15 @@
      #'(~for/common g f base (new-clause ...) body ...))]))
 (define-syntax (~for*/common/L stx)
   (syntax-case stx ()
-    [(_ g f base b? (clause ...) body ...)
+    [(_ fi comb base b? (clause ...) body ...)
      (with-syntax 
        ([(new-clause ...)
          (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
-     #'(~for/common/L g f base b? (new-clause ...) body ...))]))
+     #'(~for/common/L fi comb base b? (new-clause ...) body ...))]))
 
 (define-syntax-rule (~for x ...) (~for/common void void (void) x ...))
-(define-syntax-rule (~for/list x ...) (~for/common (λ (arg) (apply append arg)) cons null x ...))
+(define-syntax-rule (~for/list x ...) 
+  (~for/common/L reverse cons null (λ _ #f) x ...))
 (define-syntax-rule (~for/last x ...) 
   (~for/common/L identity (λ (y acc) y) #f (λ _ #f) x ...))
 (define-syntax-rule (~for/and x ...)
@@ -543,7 +541,7 @@
          (~for/common/L 
           identity
           ;; need the unless to handle when nested loops return
-          (λ (y acc) (unless (void? y) (vector-set! vec i y) (set! i (add1 i))))
+          (λ (y acc) (vector-set! vec i y) (set! i (add1 i)))
           (void)
           (λ _ (cond 
                  [(>= i vec-len)
@@ -581,7 +579,7 @@
          (define i 0)
          (~for*/common/L 
           identity
-          (λ (y acc) (unless (void? y) (vector-set! vec i y) (set! i (add1 i))))
+          (λ (y acc) (vector-set! vec i y) (set! i (add1 i)))
           (void)
           (λ _ 
             (cond 
@@ -680,9 +678,10 @@
      #'expanded-for]))
 (define-syntax-rule (~for* x ...) (~for*/common void void (void) x ...))
 (define-syntax-rule (~for*/list x ...) 
-  (~for*/common (λ (arg) (apply append arg))
-              cons ;  (λ (this others) (append this (car others)))
+  (~for*/common/L reverse
+                cons ;  (λ (this others) (append this (car others)))
                 null
+                (λ _ #f)
                 x ...))
      
 ;#;(define-syntax (~for/list stx)

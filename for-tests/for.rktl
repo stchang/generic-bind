@@ -291,21 +291,21 @@
 ;                      (number->string i))
 ;         c)))
 
-;;; Check empty clauses
-;(let ()
-;  (define vector-iters 0)
-;  (test (vector 3.4 0 0 0)
-;        'no-clauses
-;        (~for/vector #:length 4 ()
-;                    (set! vector-iters (+ 1 vector-iters))
-;                    3.4))
-;  (test 1 values vector-iters)
-;  (test (vector 3.4 0 0 0)
-;        'no-clauses
-;        (~for*/vector #:length 4 ()
-;                     (set! vector-iters (+ 1 vector-iters))
-;                     3.4))
-;  (test 2 values vector-iters))
+;; Check empty clauses
+(let ()
+  (define vector-iters 0)
+  (test (vector 3.4 0 0 0)
+        'no-clauses
+        (~for/vector #:length 4 ()
+                    (set! vector-iters (+ 1 vector-iters))
+                    3.4))
+  (test 1 values vector-iters)
+  (test (vector 3.4 0 0 0)
+        'no-clauses
+        (~for*/vector #:length 4 ()
+                     (set! vector-iters (+ 1 vector-iters))
+                     3.4))
+  (test 2 values vector-iters))
 
 ;;; Check #:when and #:unless:
 ;(test (vector 0 1 2 1 2)
