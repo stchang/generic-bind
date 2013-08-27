@@ -103,13 +103,16 @@
 
 ;(test-sequence [(a b c) (0 1 2)] (in-indexed '(a b c)))
 
-;(let ()
-;  (define (counter) (define n 0) (lambda ([d 1]) (set! n (+ d n)) n))
+(let ()
+  (define (counter) (define n 0) (lambda ([d 1]) (set! n (+ d n)) n))
+  ;; STEVE: how does this work? in-producer passes (void) to the fn produced by
+  ;;        counter, resulting in a bad addition
+  ;; answer: in-producer is actually *in-producer, which calls do-in:
 ;  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter))] [y (in-range 4)]) x))
 ;  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter))] #:break (= x 5)) x))
-;  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter) 5)]) x))
-;  (test-sequence [(1/2 1 3/2 2 5/2 3 7/2 4 9/2)]
-;    (~for/list ([x (in-producer (counter) 5 1/2)]) x)))
+  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter) 5)]) x))
+  #;(test-sequence [(1/2 1 3/2 2 5/2 3 7/2 4 9/2)]
+    (~for/list ([x (in-producer (counter) 5 1/2)]) x)))
 
 (test-sequence [(1 2 3 4 5)]
   (parameterize ([current-input-port (open-input-string "1 2 3\n4 5")])
@@ -118,12 +121,12 @@
   (~for/list ([i (in-producer read eof (open-input-string "1 2 3\n4 5"))]) i))
 (test-sequence [("1 2 3" "4 5")]
   (~for/list ([i (in-producer read-line eof-object? (open-input-string "1 2 3\n4 5"))]) i))
-#;(test-sequence [((1 2) (3 4) (5 ,eof))]
-  (~for/list ([(i j)
-              (in-producer (lambda (p) (values (read p) (read p)))
-                           (lambda (x y) (and (eof-object? x) (eof-object? y)))
-                           (open-input-string "1 2 3\n4 5"))])
-    (list i j)))
+;(test-sequence [((1 2) (3 4) (5 ,eof))]
+;  (~for/list ([(i j)
+;              (in-producer (lambda (p) (values (read p) (read p)))
+;                           (lambda (x y) (and (eof-object? x) (eof-object? y)))
+;                           (open-input-string "1 2 3\n4 5"))])
+;    (list i j)))
 
 ;(let ([five-seq
 ;       (lambda (pos pre post)
@@ -204,99 +207,106 @@
 ;         c)))
 
 ;;; Basic sanity checks.
-;(test '#(1 2 3 4) 'for/vector (for/vector ((i (in-range 4))) (+ i 1)))
-;(test '#(1 2 3 4) 'for/vector-fast (for/vector #:length 4 ((i (in-range 4))) (+ i 1)))
-;(test '#(1 2 3 4 0 0) 'for/vector-fast (for/vector #:length 6 ((i (in-range 4))) (+ i 1)))
-;(test '#(1 2 3 4 #f #f) 'for/vector-fast (for/vector #:length 6 #:fill #f ((i (in-range 4))) (+ i 1)))
-;
-;(test '#(0 0 0 0 1 2 0 2 4) 'for*/vector (for*/vector ((i (in-range 3))
-;                                                       (j (in-range 3)))
-;                                           (+ i j)
-;                                           (* i j)))
-;(test '#(0 0 0 0 1 2 0 2 4) 'for*/vector-fast (for*/vector #:length 9 ((i (in-range 3))
-;                                                                       (j (in-range 3)))
-;                                                (+ i j)
-;                                                (* i j)))
-;
-;;; Test for both length too long and length too short
-;(let ((v (make-vector 3)))
-;  (vector-set! v 0 0)
-;  (vector-set! v 1 1)
-;  (let ((w (for/vector #:length 3 ((i (in-range 2))) i)))
-;    (test v 'for/vector-short-iter w)))
-;
-;(let ((v (make-vector 10)))
-;  (for* ((i (in-range 3))
-;         (j (in-range 3)))
-;    (vector-set! v (+ j (* i 3)) (+ i j)))
-;  (let ((w (for*/vector #:length 10 ((i (in-range 3)) (j (in-range 3))) (+ i j))))
-;    (test v 'for*/vector-short-iter w)))
-;
-;(test 2 'for/vector-long-iter
-;      (vector-length (for/vector #:length 2 ((i (in-range 10))) i)))
-;(test 5 'for*/vector-long-iter 
-;      (vector-length (for*/vector #:length 5 ((i (in-range 3)) (j (in-range 3))) (+ i j))))
-;
-;;; Test for many body expressions
-;(let* ((v (vector 1.0 2.0 3.0))
-;       (v2 (for/vector ((i (in-range 3))) 
-;             (vector-set! v i (+ (vector-ref v i) 1.0))
-;             (vector-ref v i)))
-;       (v3 (for/vector #:length 3 ((i (in-range 3)))
-;             (vector-set! v i (+ (vector-ref v i) 1.0))
-;             (vector-ref v i))))
-;  (test (vector 2.0 3.0 4.0) 'for/vector-many-body v2)
-;  (test (vector 3.0 4.0 5.0) 'for/vector-length-many-body v3))
-;
-;;; Stop when a length is specified, even if the sequence continues:
-;(test '#(0 1 2 3 4 5 6 7 8 9)
-;      'nat
-;      (for/vector #:length 10 ([i (in-naturals)]) i))
-;(test '#((0 . 0) (1 . 0) (2 . 0) (3 . 0) (4 . 0) (5 . 0) (6 . 0) (7 . 0) (8 . 0) (9 . 0))
-;      'nats
-;      (for*/vector #:length 10 ([i (in-naturals)] [j (in-naturals)]) (cons j i)))
-;(test '#((0 . 0) (1 . 0) (2 . 0) (3 . 0) (4 . 0) (0 . 1) (1 . 1) (2 . 1) (3 . 1) (4 . 1))
-;      'nat+5
-;      (for*/vector #:length 10 ([i (in-naturals)] [j (in-range 5)]) (cons j i)))
+(test '#(1 2 3 4) 'for/vector (~for/vector ((i (in-range 4))) (+ i 1)))
+(test '#(1 2 3 4) 'for/vector-fast (~for/vector #:length 4 ((i (in-range 4))) (+ i 1)))
+(test '#(1 2 3 4 0 0) 'for/vector-fast (~for/vector #:length 6 ((i (in-range 4))) (+ i 1)))
+(test '#(1 2 3 4 #f #f) 'for/vector-fast (~for/vector #:length 6 #:fill #f ((i (in-range 4))) (+ i 1)))
+
+(test '#(0 0 0 0 1 2 0 2 4) 'for*/vector (~for*/vector ((i (in-range 3))
+                                                       (j (in-range 3)))
+                                           (+ i j)
+                                           (* i j)))
+(test '#(0 0 0 0 1 2 0 2 4) 'for*/vector-fast (~for*/vector #:length 9 ((i (in-range 3))
+                                                                       (j (in-range 3)))
+                                                (+ i j)
+                                                (* i j)))
+
+(test '#(0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 2 2 2 0 0 0 2 2 2 4 4 4)
+      'for*/vector-fast (~for*/vector #:length 27 ((i (in-range 3))
+                                                   (j (in-range 3))
+                                                   [k (in-range 3)])
+                                      (+ i j)
+                                      (* i j)))
+
+;; Test for both length too long and length too short
+(let ((v (make-vector 3)))
+  (vector-set! v 0 0)
+  (vector-set! v 1 1)
+  (let ((w (~for/vector #:length 3 ((i (in-range 2))) i)))
+    (test v 'for/vector-short-iter w)))
+
+(let ((v (make-vector 10)))
+  (for* ((i (in-range 3))
+         (j (in-range 3)))
+    (vector-set! v (+ j (* i 3)) (+ i j)))
+  (let ((w (~for*/vector #:length 10 ((i (in-range 3)) (j (in-range 3))) (+ i j))))
+    (test v 'for*/vector-short-iter w)))
+
+(test 2 'for/vector-long-iter
+      (vector-length (~for/vector #:length 2 ((i (in-range 10))) i)))
+(test 5 'for*/vector-long-iter 
+      (vector-length (~for*/vector #:length 5 ((i (in-range 3)) (j (in-range 3))) (+ i j))))
+
+;; Test for many body expressions
+(let* ((v (vector 1.0 2.0 3.0))
+       (v2 (~for/vector ((i (in-range 3))) 
+             (vector-set! v i (+ (vector-ref v i) 1.0))
+             (vector-ref v i)))
+       (v3 (~for/vector #:length 3 ((i (in-range 3)))
+             (vector-set! v i (+ (vector-ref v i) 1.0))
+             (vector-ref v i))))
+  (test (vector 2.0 3.0 4.0) 'for/vector-many-body v2)
+  (test (vector 3.0 4.0 5.0) 'for/vector-length-many-body v3))
+
+;; Stop when a length is specified, even if the sequence continues:
+(test '#(0 1 2 3 4 5 6 7 8 9)
+      'nat
+      (~for/vector #:length 10 ([i (in-naturals)]) i))
+(test '#((0 . 0) (1 . 0) (2 . 0) (3 . 0) (4 . 0) (5 . 0) (6 . 0) (7 . 0) (8 . 0) (9 . 0))
+      'nats
+      (~for*/vector #:length 10 ([i (in-naturals)] [j (in-naturals)]) (cons j i)))
+(test '#((0 . 0) (1 . 0) (2 . 0) (3 . 0) (4 . 0) (0 . 1) (1 . 1) (2 . 1) (3 . 1) (4 . 1))
+      'nat+5
+      (~for*/vector #:length 10 ([i (in-naturals)] [j (in-range 5)]) (cons j i)))
 ;(test '#(1 3 5 7 9 11 13 15 17 19)
 ;      'parallel
 ;      (for*/vector #:length 10 ([(i j) (in-parallel (in-naturals)
 ;                                                    (in-naturals 1))])
 ;                   (+ i j)))
-;
-;;; Make sure the sequence stops at the length before consuming another element:
+
+;; Make sure the sequence stops at the length before consuming another element:
 ;(test '(#("1" "2" "3" "4" "5" "6" "7" "8" "9" "10") . 10)
 ;      'producer
 ;      (let ([c 0])
 ;        (cons
-;         (for/vector #:length 10 ([i (in-producer (lambda () (set! c (add1 c)) c))]) 
+;         (~for/vector #:length 10 ([i (in-producer (lambda () (set! c (add1 c)) c))]) 
 ;                     (number->string i))
 ;         c)))
 ;(test '(#("1" "2" "3" "4" "5" "6" "7" "8" "9" "10") . 10)
 ;      'producer
 ;      (let ([c 0])
 ;        (cons
-;         (for*/vector #:length 10 ([j '(0)]
+;         (~for*/vector #:length 10 ([j '(0)]
 ;                                   [i (in-producer (lambda () (set! c (add1 c)) c))])
 ;                      (number->string i))
 ;         c)))
-;
+
 ;;; Check empty clauses
 ;(let ()
 ;  (define vector-iters 0)
 ;  (test (vector 3.4 0 0 0)
 ;        'no-clauses
-;        (for/vector #:length 4 ()
+;        (~for/vector #:length 4 ()
 ;                    (set! vector-iters (+ 1 vector-iters))
 ;                    3.4))
 ;  (test 1 values vector-iters)
 ;  (test (vector 3.4 0 0 0)
 ;        'no-clauses
-;        (for*/vector #:length 4 ()
+;        (~for*/vector #:length 4 ()
 ;                     (set! vector-iters (+ 1 vector-iters))
 ;                     3.4))
 ;  (test 2 values vector-iters))
-;
+
 ;;; Check #:when and #:unless:
 ;(test (vector 0 1 2 1 2)
 ;      'when-#t
