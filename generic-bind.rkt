@@ -516,20 +516,28 @@
 ;     #'(~for/common g f base (new-clause ...) body ...))]))
 (define-syntax (~for*/common/L stx)
   (syntax-parse stx
-;    [(_ fin comb base b? ((~seq s:seq-binding ... wb:when-or-break ...) ...) body ...)
+;    [(_ fin comb base b? (clause ...) body ...)
+    [(_ fin comb base b? ((~seq sb:seq-binding ... wb:when-or-break ...) ...) body ...)
+     #:with ((new-sb ...) ...)
+     ;; the append accounts for the list around the seq-bind 
+     ;;   (added by splicing-syntax-class)
+       (map (λ (ss) (append-map (λ (s) (append (syntax->list s) (list #'#:when #'#t)))
+                                (syntax->list ss)))
+            (syntax->list #'((sb ...) ...)))
+     ;; wb is also a list (due to splicing-stx-class)
+     #:with (new-clause ...) (template ((?@ . (new-sb ... (?@ . ((?@ . wb) ...)))) ...))
 ;     (printf "ss ~a\n" (syntax->datum #'((s ...) ...)))
 ;     (printf "wb ~a\n" (syntax->datum #'((wb ...) ...)))
-    [(_ fin comb base b? (clause ...) body ...)
-     (with-syntax* 
-      ([(new-clause ...)
-         (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
+;     (with-syntax* 
+;      ([(new-clause ...)
+;         (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
 ;       ([((new-s ...) ...)
 ;         (map (λ (ss) (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list ss)))
 ;              (syntax->list #'((s ...) ...)))]
 ;        [(new-clause ...) (append-map (λ (x y) (append (syntax->list x) (syntax->list y)))
 ;                                      (syntax->list #'((new-s ...) ...))
 ;                                      (syntax->list #'((wb ...) ...)))])
-     #'(~for/common/L fin comb base b? (new-clause ...) body ...))]))
+     #'(~for/common/L fin comb base b? (new-clause ...) body ...)]))
 ;     #`(~for/common/L fin comb base b? 
 ;         (new-clause ...) body ...))]))
 
