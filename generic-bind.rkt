@@ -423,22 +423,30 @@
         (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
      #`(let ([init-accum base] ...)
-         #,(let stxloop ([cs #'(c ... bb ...)] [accums #'(init-accum ...)])
+         #,(let stxloop ([cs #'(c ... bb ...)] #;[accums #'(init-accum ...)])
              (syntax-parse cs
-               [() #`(call-with-values 
+               [() 
+;                #:with (accum-trans ...) (map (λ (s) #`(make-rename-transformer #,s)) (syntax->list accums))
+;                #`(let-syntax ([init-accum accum-trans] ...)
+                #`(call-with-values
                       (λ () body ...) 
-                      (λ results (apply combiner #,@accums results)))]
+;                      (λ results (apply combiner #,@accums results)))]
+                      (λ results (apply combiner init-accum ... results)))]
                [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
                 #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
                 #:with (seq-next ...) (generate-temporaries #'(b ...))
                 #:with new-loop (generate-temporary)
-                #:with (accum ...) accums
-                #:with (new-accum ...) (generate-temporaries #'(base ...))
-                #:with skip-it #'(new-loop new-accum ...)
-                #:with do-it #`(call-with-values (λ () #,(stxloop #'(rst ...) #'(new-accum ...)))
+;                #:with (accum ...) accums
+;                #:with (new-accum ...) (generate-temporaries #'(base ...))
+;                #:with skip-it #'(new-loop new-accum ...)
+                #:with skip-it #'(new-loop init-accum ...)
+;                #:with do-it #`(call-with-values (λ () #,(stxloop #'(rst ...) #'(new-accum ...)))
+                #:with do-it #`(call-with-values (λ () #,(stxloop #'(rst ...)))
                                                  new-loop)
-                #:with its-done #'(values new-accum ...)
-                #:with one-more-time (stxloop #'(rst ...) #'(new-accum ...))
+;                #:with its-done #'(values new-accum ...)
+                #:with its-done #'(values init-accum ...)
+;                #:with one-more-time (stxloop #'(rst ...) #'(new-accum ...))
+                #:with one-more-time (stxloop #'(rst ...))
                 #:with conditional-body
                 (let whenloop ([ws (syntax->list #'((w) ...))])
                   (if (null? ws)
@@ -449,10 +457,14 @@
                         [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
                         [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
                 #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
-                    (let new-loop ([new-accum accum] ...)
-                      (if (and (seq-not-empty?) ... (not (break? new-accum ...)))
+;                    (let new-loop ([new-accum accum] ...)
+                    ;; must shadow accum in new loop, in case body references it
+                    (let new-loop ([init-accum init-accum] ...)
+;                      (if (and (seq-not-empty?) ... (not (break? new-accum ...)))
+                      (if (and (seq-not-empty?) ... (not (break? init-accum ...)))
                           (~let ([b (seq-next)] ...) conditional-body)
-                          (values new-accum ...))))])))
+;                          (values new-accum ...))))])))
+                          (values init-accum ...))))])))
      #'(call-with-values (λ () expanded-for) final)]
     ;; this clause has unnamed accums, name them and then call the first clause
     [(_ final combiner break? (base ...) 
@@ -611,12 +623,21 @@
 ;(define-syntax-rule (~for/hasheqv x ...) (~for/common id-fn hash-set (λ _ #f) ((hasheqv)) x ...))
 ;(define-syntax-rule (~for*/hasheqv x ...) (~for*/common id-fn hash-set (λ _ #f) ((hasheqv)) x ...))
 ;; ~for/fold and ~for/lists don't use ~for/common/L because they require multiple accums
-;(define-syntax (~for/fold stx)
-;  (syntax-parse stx
-;    [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
-;     (template (~for/common id-fn values (λ _ #f) ([accum init] ...)
-;                            ((?@ . c) ...) (?@ . bb) ... body ...))]))
-(define-syntax (~for/fold stx) ; foldl
+(define-syntax (~for/fold stx)
+  (syntax-parse stx
+    [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with (res ...) (generate-temporaries #'(accum ...))
+     ;; combiner drops old accums and uses result(s) of body as current accums
+     (template (~for/common values (λ (accum ... res ...) (values res ...)) (λ _ #f)
+                            ([accum init] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
+(define-syntax (~for*/fold stx)
+  (syntax-parse stx
+    [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with (res ...) (generate-temporaries #'(accum ...))
+     ;; combiner drops old accums and uses result(s) of body as current accums
+     (template (~for*/common values (λ (accum ... res ...) (values res ...)) (λ _ #f)
+                            ([accum init] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
+#;(define-syntax (~for/fold stx) ; foldl
   (syntax-parse stx
     [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
@@ -648,7 +669,7 @@
                       (~let ([b (seq-next)] ...) conditional-body)
                       (values accum ...))))]))
      #'expanded-for]))
-(define-syntax (~for*/fold stx) ; foldl
+#;(define-syntax (~for*/fold stx) ; foldl
   (syntax-parse stx
     [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
      (with-syntax 

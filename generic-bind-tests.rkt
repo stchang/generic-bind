@@ -293,6 +293,10 @@
  (~for/fold ([sum 0]) ([x '(1 2 3 4 5 6)]) (+ x sum))
  21)
 
+(check-equal?
+ (~for/fold ([sum 0]) ([x '(1 2 3 4 5 6)]) (+ x sum))
+ (for/fold ([sum 0]) ([x '(1 2 3 4 5 6)]) (+ x sum)))
+
 (check-false (~for/and ([x (list #t #f #t)]) (displayln x) x))
 ;; should print
 ;#t
