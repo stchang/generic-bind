@@ -298,3 +298,49 @@
 ;#t
 ;#f
 ;#f
+
+(check-equal?
+ (~for*/list ([($ (list x y)) (list (list (list 1 2 3) (list 4 5 6))
+                                    (list (list 10 11 12) (list 13 14 15)))]
+               [a x] [b y])
+             (list a b))
+ '((1 4) (1 5) (1 6) (2 4) (2 5) (2 6) (3 4) (3 5) (3 6) (10 13)
+   (10 14) (10 15) (11 13) (11 14) (11 15) (12 13) (12 14) (12 15)))
+(check-equal? 
+  (~for*/list ([($ (list x y)) (list (list (list 1 2 3) (list 4 5 6))
+                                    (list (list 10 11 12) (list 13 14 15)))]
+               [a x] [b y])
+             (list a b))
+  (for*/list ([lst (list (list (list 1 2 3) (list 4 5 6))
+                         (list (list 10 11 12) (list 13 14 15)))]
+              [a (car lst)] [b (cadr lst)])
+    (list a b)))
+(check-equal?
+ (~for*/list ([(~vs v1 v2) (in-hash (hash 1 2 3 4))]
+              [x v1] [y v2])
+             (cons x y))
+ '((0 . 0) (0 . 1) (0 . 0) (0 . 1) (0 . 2) (0 . 3)
+   (1 . 0) (1 . 1) (1 . 2) (1 . 3) (2 . 0) (2 . 1) (2 . 2) (2 . 3)))
+(check-equal?
+  (~for*/list ([(~vs v1 v2) (in-hash (hash 1 2 3 4))]
+              [x v1] [y v2])
+             (cons x y))
+   (for*/list ([(v1 v2) (in-hash (hash 1 2 3 4))]
+              [x v1] [y v2])
+             (cons x y)))
+(check-equal?
+  (~for*/list ([(v1 v2) (in-hash (hash 1 2 3 4))]
+              [x v1] [y v2])
+             (cons x y))
+  (~for*/list ([(~vs v1 v2) (in-hash (hash 1 2 3 4))]
+               [x v1] [y v2])
+              (cons x y)))
+
+(check-equal?
+ (~for*/list ([(~vs ($ (list x y)) ($ (list a b))) 
+               (in-hash (hash (list 1 2) (list 3 4) (list 5 6) (list 7 8)))]
+              [c x])
+             (list x y a b c))
+ (for*/list ([(lst1 lst2) (in-hash (hash (list 1 2) (list 3 4) (list 5 6) (list 7 8)))]
+             [c (car lst1)])
+   (list (car lst1) (cadr lst1) (car lst2) (cadr lst2) c)))

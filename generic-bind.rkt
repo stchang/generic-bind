@@ -21,10 +21,12 @@
 (provide ~m ~vs $: $list $null
          ~define ~lambda (rename-out [~lambda ~λ]) ~case-lambda ~case-define
          ~let ~let* ~letrec
-         ~for ~for/list ~for/fold ~for/lists ~for/last ~for/and ~for/or 
-         ~for/first ~for/sum ~for/product ~for/vector ~for/hash ~for/hasheq ~for/hasheqv
-         ~for* ~for*/list ~for*/fold ~for*/lists ~for*/last ~for*/and ~for*/or
-         ~for*/first ~for*/sum ~for*/product ~for*/vector ~for*/hash ~for*/hasheq ~for*/hasheqv)
+         ~for ~for/list ~for/vector ~for/fold ~for/lists ~for/first ~for/last 
+         ~for/and ~for/or ~for/sum ~for/product 
+         ~for/hash ~for/hasheq ~for/hasheqv
+         ~for* ~for*/list ~for*/fold ~for*/vector ~for*/lists 
+         ~for*/first ~for*/last ~for*/and ~for*/or ~for*/sum ~for*/product  
+         ~for*/hash ~for*/hasheq ~for*/hasheqv)
 
 (require racket/splicing)
 
@@ -272,7 +274,13 @@
                   #:attr definer #'define
                   #:attr letter #'let
                   #:attr ids #'x
-                  #:attr nested-defs #'()))
+                  #:attr nested-defs #'())
+     ;; match values, like in for forms
+    (pattern (x:id ...) #:attr name (generate-temporary) ; shouldnt get used
+                        #:attr definer #'define-values
+                        #:attr letter #'let-values
+                        #:attr ids #'(x ...)
+                        #:attr nested-defs #'()))
 
     ;; ~case-lambda syntax-classes
     (define-syntax-class case-lam-function-header
@@ -378,19 +386,20 @@
 ;(define (seq-rst s) (sequence-tail s 1))
 ;(define (seq-empty? s) (zero? (sequence-length s)))
 (begin-for-syntax
+  (define-splicing-syntax-class seq-binding
+    (pattern (b:for-binder seq:expr)))
   (define-splicing-syntax-class for-clause
-    (pattern (b:for-binder seq:expr))
-    (pattern w:when-clause)
-    (pattern br:break-clause))
+    (pattern :seq-binding)
+    (pattern :when-or-break))
   (define-splicing-syntax-class body-or-break
     (pattern bb:break-clause)
     (pattern e:expr))
   (define-syntax-class for-binder
-    (pattern b:bind #:attr new-b #'b)
-    (pattern x:id #:attr new-b #'x
-                  #:attr nested-defs #'())
-    (pattern (x:id ...) #:attr new-b #'(~vs x ...)
-                        #:attr nested-defs #'()))
+    (pattern :bind); #:attr new-b #'b)
+    (pattern x:id); #:attr new-b #'x)
+;                  #:attr nested-defs #'())
+    (pattern (x:id ...))); #:attr new-b #'(~vs y ...)))
+;                        #:attr nested-defs #'()))
   (define-splicing-syntax-class when-or-break
     (pattern :when-clause)
     (pattern :break-clause))
@@ -404,57 +413,57 @@
 
 (define id-fn identity)
 
-#;(define-syntax (~for/common stx)
-  (syntax-parse stx
-    [(_ flatten combiner base (c:for-clause ...) bb:break-clause ... body:expr ...)
-     #:with expanded-for
-     (let ([depth 0])
-       (define res
-     (let stxloop ([cs #'(c ... bb ...)])
-       (syntax-parse cs
-         [() #'(begin body ...)]
-         [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
-;          #:with (s ...) (generate-temporaries #'(b ...))
-          #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
-          #:with (seq-next ...) (generate-temporaries #'(b ...))
-          #:with new-loop (generate-temporary)
-          #:with skip-it #'(new-loop) ;;#'(new-loop (seq-rst s) ...)
-          #:with do-it 
-;            #`(call-with-values 
-;               (λ () #,(stxloop #'(rst ...)))
-;               (λ this-iter (call-with-values 
-;                        (λ () skip-it)
-;                        (λ other-iters (combiner this-iter other-iters)))))
-          #`(let ([result #,(stxloop #'(rst ...))]) (combiner result skip-it))
-          #:with its-done #'base
-          #:with one-more-time 
-;            #`(call-with-values 
-;               (λ () #,(stxloop #'(rst ...)))
-;               (λ this-iter (call-with-values 
-;                             (λ () base)
-;                             (λ other-iters (combiner this-iter other-iters)))))
-            #`(let ([result #,(stxloop #'(rst ...))]) (combiner result base))
-          #:with conditional-body
-            (let whenloop ([ws (syntax->list #'((w) ...))])
-              (if (null? ws)
-                  #'do-it
-                  (syntax-parse (car ws)
-                    [((#:when guard)) #`(if guard #,(whenloop (cdr ws)) skip-it)]
-                    [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
-                    [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
-                    [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
-            (set! depth (add1 depth))
-          #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
-               (let new-loop ()
-                 (if (and (seq-not-empty?) ...)
-                     (~let ([b.new-b (seq-next)] ...)
-;                       #,@(append-map syntax->list (syntax->list #'(b.nested-defs ...)))
-                           conditional-body)
-                     base)))])))
-       (let flatten-loop ([n (- depth 2)] [res res])
-         (if (<= n 0) res
-           (flatten-loop (sub1 n) #`(flatten #,res)))))
-     #'expanded-for]))
+;#;(define-syntax (~for/common stx)
+;  (syntax-parse stx
+;    [(_ flatten combiner base (c:for-clause ...) bb:break-clause ... body:expr ...)
+;     #:with expanded-for
+;     (let ([depth 0])
+;       (define res
+;     (let stxloop ([cs #'(c ... bb ...)])
+;       (syntax-parse cs
+;         [() #'(begin body ...)]
+;         [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
+;;          #:with (s ...) (generate-temporaries #'(b ...))
+;          #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
+;          #:with (seq-next ...) (generate-temporaries #'(b ...))
+;          #:with new-loop (generate-temporary)
+;          #:with skip-it #'(new-loop) ;;#'(new-loop (seq-rst s) ...)
+;          #:with do-it 
+;;            #`(call-with-values 
+;;               (λ () #,(stxloop #'(rst ...)))
+;;               (λ this-iter (call-with-values 
+;;                        (λ () skip-it)
+;;                        (λ other-iters (combiner this-iter other-iters)))))
+;          #`(let ([result #,(stxloop #'(rst ...))]) (combiner result skip-it))
+;          #:with its-done #'base
+;          #:with one-more-time 
+;;            #`(call-with-values 
+;;               (λ () #,(stxloop #'(rst ...)))
+;;               (λ this-iter (call-with-values 
+;;                             (λ () base)
+;;                             (λ other-iters (combiner this-iter other-iters)))))
+;            #`(let ([result #,(stxloop #'(rst ...))]) (combiner result base))
+;          #:with conditional-body
+;            (let whenloop ([ws (syntax->list #'((w) ...))])
+;              (if (null? ws)
+;                  #'do-it
+;                  (syntax-parse (car ws)
+;                    [((#:when guard)) #`(if guard #,(whenloop (cdr ws)) skip-it)]
+;                    [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
+;                    [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
+;                    [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
+;            (set! depth (add1 depth))
+;          #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
+;               (let new-loop ()
+;                 (if (and (seq-not-empty?) ...)
+;                     (~let ([b.new-b (seq-next)] ...)
+;;                       #,@(append-map syntax->list (syntax->list #'(b.nested-defs ...)))
+;                           conditional-body)
+;                     base)))])))
+;       (let flatten-loop ([n (- depth 2)] [res res])
+;         (if (<= n 0) res
+;           (flatten-loop (sub1 n) #`(flatten #,res)))))
+;     #'expanded-for]))
 
 ;; sig for combiner is acc x ... -> acc
 ;; acc must come first because of possible mutiple value results
@@ -466,7 +475,9 @@
      #`(let ([init-accum base])
      #,(let stxloop ([cs #'(c ... bb ...)] [accum #'init-accum])
        (syntax-parse cs
-         [() #`(call-with-values (λ () body ...) (λ results (apply combiner #,accum results)))]
+         [() #`(call-with-values 
+                (λ () body ...) 
+                (λ results (apply combiner #,accum results)))]
          [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
           #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
           #:with (seq-next ...) (generate-temporaries #'(b ...))
@@ -485,32 +496,42 @@
                     [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
                     [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
                     [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
+;          #:with (newb ...) (map (λ (s b) (datum->syntax b (syntax->datum s)))(syntax->list #'(b.new-b ...)) (syntax->list #'(b ...)))
             #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
                 (let new-loop ([new-accum #,accum])
                  (if (and (seq-not-empty?) ... (not (break? new-accum)))
-                     (~let ([b.new-b (seq-next)] ...)
-;                       #,@(append-map syntax->list (syntax->list #'(b.nested-defs ...)))
-                           conditional-body)
+                     (~let ([b (seq-next)] ...) conditional-body)
                      new-accum)))])))
 ;       (let flatten-loop ([n (- depth 2)] [res res])
 ;         (if (<= n 0) res
 ;           (flatten-loop (sub1 n) #`(flatten #,res)))))
      #'(final expanded-for)]))
 
-#;(define-syntax (~for*/common stx)
-  (syntax-case stx ()
-    [(_ g f base (clause ...) body ...)
-     (with-syntax 
-       ([(new-clause ...)
-         (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
-     #'(~for/common g f base (new-clause ...) body ...))]))
+;#;(define-syntax (~for*/common stx)
+;  (syntax-case stx ()
+;    [(_ g f base (clause ...) body ...)
+;     (with-syntax 
+;       ([(new-clause ...)
+;         (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
+;     #'(~for/common g f base (new-clause ...) body ...))]))
 (define-syntax (~for*/common/L stx)
-  (syntax-case stx ()
+  (syntax-parse stx
+;    [(_ fin comb base b? ((~seq s:seq-binding ... wb:when-or-break ...) ...) body ...)
+;     (printf "ss ~a\n" (syntax->datum #'((s ...) ...)))
+;     (printf "wb ~a\n" (syntax->datum #'((wb ...) ...)))
     [(_ fin comb base b? (clause ...) body ...)
-     (with-syntax 
-       ([(new-clause ...)
+     (with-syntax* 
+      ([(new-clause ...)
          (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(clause ...)))])
+;       ([((new-s ...) ...)
+;         (map (λ (ss) (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list ss)))
+;              (syntax->list #'((s ...) ...)))]
+;        [(new-clause ...) (append-map (λ (x y) (append (syntax->list x) (syntax->list y)))
+;                                      (syntax->list #'((new-s ...) ...))
+;                                      (syntax->list #'((wb ...) ...)))])
      #'(~for/common/L fin comb base b? (new-clause ...) body ...))]))
+;     #`(~for/common/L fin comb base b? 
+;         (new-clause ...) body ...))]))
 
 (define-syntax-rule (~for x ...) (~for/common/L void void (void) (λ _ #f) x ...))
 (define-syntax-rule (~for* x ...) (~for*/common/L void void (void) (λ _ #f) x ...))
@@ -652,8 +673,7 @@
             #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
                 (let new-loop ([accum init] ...)
                   (if (and (seq-not-empty?) ...)
-                      (~let ([b.new-b (seq-next)] ...)
-                        conditional-body)
+                      (~let ([b (seq-next)] ...) conditional-body)
                       (values accum ...))))]))
      #'expanded-for]))
 (define-syntax (~for*/fold stx) ; foldl
@@ -710,8 +730,7 @@
                 (let ([z null] ...)
                   (let new-loop ()
                     (if (and (seq-not-empty?) ...)
-                        (~let ([b.new-b (seq-next)] ...)
-                              conditional-body)
+                        (~let ([b (seq-next)] ...) conditional-body)
                         (values z ...)))))]))
      #'expanded-for]))
      
