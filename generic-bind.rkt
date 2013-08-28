@@ -22,7 +22,8 @@
          ~define ~lambda ~case-lambda ~case-define
          (rename-out [~lambda ~λ] [~lambda ~lam] [~lambda ~l] 
                      [~define ~def] [~define ~d]
-                     [~m $] [~vs ⋈])
+                     [~m $] [~vs ⋈]
+                     [~case-lambda ~case-lam] [~case-define ~case-def])
          ~let ~let* ~letrec
          ~for ~for/list ~for/vector ~for/fold ~for/lists ~for/first ~for/last 
          ~for/and ~for/or ~for/sum ~for/product 
@@ -340,9 +341,10 @@
      #'(let ([fn (~lambda ?header ?body ...)] ...) (λ args new-body))]))
 
 (define-syntax (~case-define stx)
-  (syntax-parse stx
-    [(_ f clause ...)
-     #'(define f (~case-lambda clause ...))]))
+  (syntax-parse stx #:datum-literals (→)
+    [(_ f (x ... → body ...) ...)
+     #'(define f (~case-lambda [(x ...) body ...] ...))]
+    [(_ f clause ...) #'(define f (~case-lambda clause ...))]))
   
 ;; ~let -----------------------------------------------------------------------
 (define-syntax (~let stx)

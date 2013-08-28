@@ -192,32 +192,61 @@
 (check-equal? (casemap1 add1 (list 1)) (list 2))
 (check-equal? (casemap1 add1 (list 1 2 3 4)) (list 2 3 4 5))
 
-(~case-define new-map 
+(~case-define new-map1 
   [(f $null) null]
-  [(f ($: x xs)) (cons (f x) (new-map f xs))])
+  [(f ($: x xs)) (cons (f x) (new-map1 f xs))])
+(check-equal? (new-map1 add1 null) null)
+(check-equal? (new-map1 add1 (list 1)) (list 2))
+(check-equal? (new-map1 add1 (list 1 2)) (list 2 3))
+
+(~case-def new-map [f $null → null]
+                   [f ($: x xs) → (cons (f x) (new-map f xs))])
 (check-equal? (new-map add1 null) null)
 (check-equal? (new-map add1 (list 1)) (list 2))
 (check-equal? (new-map add1 (list 1 2)) (list 2 3))
 
-(~case-define new-filter 
+(~case-define new-filter1 
   [(p? $null) null]
-  [(p? ($: x xs)) (if (p? x) (cons x (new-filter p? xs)) (filter p? xs))])
+  [(p? ($: x xs)) (if (p? x) (cons x (new-filter1 p? xs)) (filter p? xs))])
+(check-equal? (new-filter1 even? null) null)
+(check-equal? (new-filter1 even? (list 1)) null)
+(check-equal? (new-filter1 even? (list 1 2 3 4 5)) (list 2 4))
+
+(~case-def new-filter [p? $null → null]
+                      [p? ($: (? p? x) xs) → (cons x (new-filter p? xs))]
+                      [p? ($: x xs) → (filter p? xs)])
 (check-equal? (new-filter even? null) null)
 (check-equal? (new-filter even? (list 1)) null)
 (check-equal? (new-filter even? (list 1 2 3 4 5)) (list 2 4))
 
-(~case-define new-foldl
+(~case-define new-foldl1
   [(f base $null) base]
-  [(f base ($: x xs)) (new-foldl f (f x base) xs)])
+  [(f base ($: x xs)) (new-foldl1 f (f x base) xs)])
+(check-equal? (new-foldl1 - 0 null) 0)
+(check-equal? (new-foldl1 - 0 (list 1)) 1)
+(check-equal? (new-foldl1 - 0 (list 1)) (foldl - 0 (list 1)))
+(check-equal? (new-foldl1 - 0 (list 1 2)) 1)
+(check-equal? (new-foldl1 - 0 (list 1 2)) (foldl - 0 (list 1 2)))
+
+(~case-def new-foldl [f base $null → base]
+                     [f base ($: x xs) → (new-foldl f (f x base) xs)])
 (check-equal? (new-foldl - 0 null) 0)
 (check-equal? (new-foldl - 0 (list 1)) 1)
 (check-equal? (new-foldl - 0 (list 1)) (foldl - 0 (list 1)))
 (check-equal? (new-foldl - 0 (list 1 2)) 1)
 (check-equal? (new-foldl - 0 (list 1 2)) (foldl - 0 (list 1 2)))
 
-(~case-define new-foldr
+(~case-define new-foldr1
   [(f base $null) base]
-  [(f base ($: x xs)) (f x (new-foldr f base xs))])
+  [(f base ($: x xs)) (f x (new-foldr1 f base xs))])
+(check-equal? (new-foldr1 - 0 null) 0)
+(check-equal? (new-foldr1 - 0 (list 1)) 1)
+(check-equal? (new-foldr1 - 0 (list 1)) (foldr - 0 (list 1)))
+(check-equal? (new-foldr1 - 0 (list 1 2)) -1)
+(check-equal? (new-foldr1 - 0 (list 1 2)) (foldr - 0 (list 1 2)))
+
+(~case-def new-foldr [f base $null → base]
+                     [f base ($: x xs) → (f x (new-foldr f base xs))])
 (check-equal? (new-foldr - 0 null) 0)
 (check-equal? (new-foldr - 0 (list 1)) 1)
 (check-equal? (new-foldr - 0 (list 1)) (foldr - 0 (list 1)))
