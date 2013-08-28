@@ -207,14 +207,14 @@
 
 (~case-define new-filter1 
   [(p? $null) null]
-  [(p? ($: x xs)) (if (p? x) (cons x (new-filter1 p? xs)) (filter p? xs))])
+  [(p? ($: x xs)) (if (p? x) (cons x (new-filter1 p? xs)) (new-filter1 p? xs))])
 (check-equal? (new-filter1 even? null) null)
 (check-equal? (new-filter1 even? (list 1)) null)
 (check-equal? (new-filter1 even? (list 1 2 3 4 5)) (list 2 4))
 
 (~case-def new-filter [p? $null → null]
                       [p? ($: (? p? x) xs) → (cons x (new-filter p? xs))]
-                      [p? ($: x xs) → (filter p? xs)])
+                      [p? ($: x xs) → (new-filter p? xs)])
 (check-equal? (new-filter even? null) null)
 (check-equal? (new-filter even? (list 1)) null)
 (check-equal? (new-filter even? (list 1 2 3 4 5)) (list 2 4))
