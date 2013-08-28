@@ -676,14 +676,28 @@
          ([(new-clause ...)
            (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(c ...)))])
        #'(for/fold ([accum init] ...) (new-clause ...) bb ... body ...))]))
+(define-syntax (~for/lists stx)
+  (syntax-parse stx
+    [(_ (accum ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with (res ...) (generate-temporaries #'(accum ...))
+     ;; combiner drops old accums and uses result(s) of body as current accums
+     (template (~for/common (λ (accum ...) (values (reverse accum) ...)) (λ (accum ... res ...) (values (cons res accum) ...)) (λ _ #f)
+                            ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 (define-syntax (~for*/lists stx)
+  (syntax-parse stx
+    [(_ (accum ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with (res ...) (generate-temporaries #'(accum ...))
+     ;; combiner drops old accums and uses result(s) of body as current accums
+     (template (~for*/common (λ (accum ...) (values (reverse accum) ...)) (λ (accum ... res ...) (values (cons res accum) ...)) (λ _ #f)
+                            ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
+#;(define-syntax (~for*/lists stx)
   (syntax-parse stx
     [(_ (accum ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
      (with-syntax 
          ([(new-clause ...)
            (append-map (λ (s) (list s #'#:when #'#t)) (syntax->list #'(c ...)))])
        #'(for/lists (accum ...) (new-clause ...) bb ... body ...))]))
-(define-syntax (~for/lists stx)
+#;(define-syntax (~for/lists stx)
   (syntax-parse stx
     [(_ (accum ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
