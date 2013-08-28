@@ -6,20 +6,23 @@
 (require (for-syntax "stx-utils.rkt"))
 
 ;; TODO:
-;; [x] 2013-08-26: ~let doesn't support ~vs
-;;                 DONE: 2013-08-26
+;; [x] 2013-08-26: ~let doesn't support ~vs DONE: 2013-08-26
 ;; [o] 2013-08-24: bug: creating "bound-ids" stx prop breaks ~define
 ;;                 (as in it doesn't recognize :bind classes anymore)
 ;; [o] 2013-08-22: get rid of suprious defines for generic binds nested in
 ;;                 generic ~v binding -- use splicing
-;; [o] 2013-08-21: syntax object for ~m and ~vs is void?
+;; [o] 2013-08-21: syntax object for ~m and ~vs is void? 
 ;;                 can I put anything useful here?
 ;; [o] 2013-08-21: create generic form for syntax to 
 ;;                 automatically define accessors?
 ;; [o] 2013-08-21: fix error msgs
 ;;                 - named ~let dup id references define
-(provide ~m ~vs $: $list $null
-         ~define ~lambda (rename-out [~lambda ~λ]) ~case-lambda ~case-define
+
+(provide ~vs $: $list $null ; dont export ~m
+         ~define ~lambda ~case-lambda ~case-define
+         (rename-out [~lambda ~λ] [~lambda ~lam] [~lambda ~l] 
+                     [~define ~def] [~define ~d]
+                     [~m $] [~vs ⋈])
          ~let ~let* ~letrec
          ~for ~for/list ~for/vector ~for/fold ~for/lists ~for/first ~for/last 
          ~for/and ~for/or ~for/sum ~for/product 
@@ -28,10 +31,8 @@
          ~for*/first ~for*/last ~for*/and ~for*/or ~for*/sum ~for*/product  
          ~for*/hash ~for*/hasheq ~for*/hasheqv)
 
-(require racket/splicing)
-
-;; (define-generic-stx bind (definer letter ids let-only 
-;;                           nested-definers nested-idss))
+;; (define-generic-stx bind 
+;;   (definer letter ids let-only nested-definers nested-idss))
 
 ;; ----------------------------------------------------------------------------
 ;; syntax classes
@@ -62,8 +63,6 @@
       #:attr definer (bind-definer #'expanded-b)
       #:attr letter (bind-letter #'expanded-b)
       #:attr ids (datum->syntax #'b (bind-ids #'expanded-b))
-;      #:attr nested-definers (bind-nested-definers #'expanded-b)
-;      #:attr nested-idss (datum->syntax #'b (bind-nested-idss #'expanded-b))))
       #:attr nested-defs
       (let ([ids-lst (syntax->list #'ids)])
         (if ids-lst ; for non-list patterns
@@ -75,17 +74,17 @@
                  [id (syntax->list #'ids)])
                 (list nested-definer (datum->syntax #'b nested-ids) id)))
             #'()))))
-  ;; - need this because some instances (ie anything involving values)
-  ;; needs the target of the bind to work
+  ;; - need the following separate class because some instances 
+  ;;   (ie anything involving values) needs the target of the bind to work
   ;; - for example, values can't be used in function defs
   ;; - so this is a subset of :bind, which is used in things like fn defs
   (define-syntax-class bind/non-let
     #:description "a generic bind instance that supports non-let contexts"
     #:auto-nested-attributes
     (pattern :bind 
-      #:fail-when (bind-let-only? #'expanded-b)
-                  (format "can't use ~a pattern in non-let binding context"
-                          (syntax->datum #'b))))
+             #:fail-when (bind-let-only? #'expanded-b)
+                         (format "can't use ~a pattern in non-let binding ctxt"
+                                 (syntax->datum #'b))))
   (define-syntax-class id-or-bind/non-let
     #:auto-nested-attributes
     (pattern :bind/non-let #:attr name (generate-temporary))
@@ -113,7 +112,8 @@
                 [nested-idss ,null])
               #'(void))]))
 
-;; match bindings where the outer form is a list or cons
+;; generic match bindings where the outer form is a list or cons
+;; ie, just match list or match cons
 (define-syntax-rule (match-listrest-define (x ... rst) e)
   (match-define (list-rest x ... rst) e))
 (define-syntax-rule (match-listrest-let ([(x ... rst) e] ...) body ...) 
@@ -332,14 +332,13 @@
      #:with (fn ...) (generate-temporaries #'(?header ...))
      #:with args (generate-temporary)
      #:with new-body 
-     (let loop ([fns (syntax->list #'(fn ...))])
-       (if (null? (cdr fns))
-           #`(apply #,(car fns) args)
-           #`(with-handlers ([exn:misc:match? (λ _ #,(loop (cdr fns)))])
-               (apply #,(car fns) args))))
-     #'(let ([fn (~lambda ?header ?body ...)] ...)
-         (λ args new-body))]))
-      ;(case-lambda [?header.new-header (?@ . ?header.defs) ?body ...] ...))]))
+       (let loop ([fns (syntax->list #'(fn ...))])
+         (if (null? (cdr fns))
+             #`(apply #,(car fns) args)
+             #`(with-handlers ([exn:misc:match? (λ _ #,(loop (cdr fns)))])
+                 (apply #,(car fns) args))))
+     #'(let ([fn (~lambda ?header ?body ...)] ...) (λ args new-body))]))
+
 (define-syntax (~case-define stx)
   (syntax-parse stx
     [(_ f clause ...)
@@ -355,7 +354,6 @@
          (~define (loop x ...) body ...)
          (loop e ...))]
     [(_ ([x:id-or-bind e] ...) body ...)
-;     #'((~lambda (x ...) body ...) e ...)]))
      (with-syntax ([(new-e ...) (map syntax-local-introduce (syntax->list #'(e ...)))])
        #`(let ()
            (x.definer x.ids new-e) ...

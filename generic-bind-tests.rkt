@@ -2,9 +2,6 @@
 (require rackunit)
 (require "generic-bind.rkt")
 
-(define-syntax-rule (⋈ x ...) (~vs x ...))
-(define-syntax-rule ($ x ...) (~m x ...))
-
 ;; define non-fns
 (~define x1 (+ 1 2))
 (check-equal? x1 3)
