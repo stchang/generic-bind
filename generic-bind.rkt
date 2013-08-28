@@ -435,7 +435,8 @@
                 #:with (accum ...) accums
                 #:with (new-accum ...) (generate-temporaries #'(base ...))
                 #:with skip-it #'(new-loop new-accum ...)
-                #:with do-it #`(new-loop #,(stxloop #'(rst ...) #'(new-accum ...)))
+                #:with do-it #`(call-with-values (λ () #,(stxloop #'(rst ...) #'(new-accum ...)))
+                                                 new-loop)
                 #:with its-done #'(values new-accum ...)
                 #:with one-more-time (stxloop #'(rst ...) #'(new-accum ...))
                 #:with conditional-body
@@ -610,6 +611,11 @@
 ;(define-syntax-rule (~for/hasheqv x ...) (~for/common id-fn hash-set (λ _ #f) ((hasheqv)) x ...))
 ;(define-syntax-rule (~for*/hasheqv x ...) (~for*/common id-fn hash-set (λ _ #f) ((hasheqv)) x ...))
 ;; ~for/fold and ~for/lists don't use ~for/common/L because they require multiple accums
+;(define-syntax (~for/fold stx)
+;  (syntax-parse stx
+;    [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+;     (template (~for/common id-fn values (λ _ #f) ([accum init] ...)
+;                            ((?@ . c) ...) (?@ . bb) ... body ...))]))
 (define-syntax (~for/fold stx) ; foldl
   (syntax-parse stx
     [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
