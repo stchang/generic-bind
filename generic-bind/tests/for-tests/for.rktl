@@ -6,7 +6,53 @@
 ;
 (require compatibility/mlist
          "for-util.rkt")
-(require rackunit "../../generic-bind.rkt")
+(require rackunit)
+(require 
+ (rename-in 
+  "../../generic-bind.rkt"
+  [~define define] [~lambda lambda] [~λ λ] [~let let] [~let* let*]
+  [~for for] [~for/list for/list] [~for/vector for/vector] [~for/lists for/lists]
+  [~for/fold for/fold] [~for/first for/first] [~for/last for/last] 
+  [~for/and for/and] [~for/or for/or] [~for/sum for/sum] [~for/product for/product] 
+  [~for/hash for/hash] [~for/hasheq for/hasheq] [~for/hasheqv for/hasheqv]
+  [~for* for*] [~for*/list for*/list] [~for*/vector for*/vector] [~for*/lists for*/lists]
+  [~for*/fold for*/fold] [~for*/first for*/first] [~for*/last for*/last] 
+  [~for*/and for*/and] [~for*/or for*/or] [~for*/sum for*/sum] [~for*/product for*/product]
+  [~for*/hash for*/hash] [~for*/hasheq for*/hasheq] [~for*/hasheqv for*/hasheqv]))
+
+;; some informal timing info (for for.rktl and for-util.rkt)
+;; compile time ----------
+;; racket define and for
+;real	0m3.880s
+;user	0m3.748s
+;sys	0m0.116s
+;; with ~define and ~for
+;real	0m6.984s
+;user	0m6.760s
+;sys	0m0.200s
+;; run time ----------
+;; racket define and for
+;real	0m0.457s
+;user	0m0.376s
+;sys	0m0.076s
+;; with ~define and ~for
+;real	0m0.420s
+;user	0m0.392s
+;sys	0m0.024s
+
+;> (let ([n 200]) (time (for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (values (list x) (list y) (list z)))) (void))
+;cpu time: 5632 real time: 5652 gc time: 4912
+;> (let ([n 200]) (time (~for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (values (list x) (list y) (list z)))) (void))
+;cpu time: 14237 real time: 14283 gc time: 11061
+;> (let ([n 200]) (time (for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+;cpu time: 3100 real time: 3111 gc time: 2852
+;> (let ([n 200]) (time (for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+;cpu time: 4901 real time: 4919 gc time: 4636
+;> (let ([n 200]) (time (~for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+;cpu time: 17621 real time: 17684 gc time: 14373
+;> (let ([n 200]) (time (~for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+;cpu time: 16145 real time: 16306 gc time: 12769
+
 
 (test-sequence [(0 1 2)] 3)
 (test-sequence [(0 1 2)] (in-range 3))
@@ -22,7 +68,7 @@
 (test-sequence [(a b c)] (in-mlist (mlist 'a 'b 'c)))
 (test-sequence [(a b c)] #(a b c))
 (test-sequence [(a b c)] (in-vector #(a b c)))
-(test-sequence [(a b c)] (in-vector (chaperone-vector #(a b c) (~lambda (vec i val) val) (~lambda (vec i val) val))))
+(test-sequence [(a b c)] (in-vector (chaperone-vector #(a b c) (lambda (vec i val) val) (lambda (vec i val) val))))
 (test-sequence [(b c d)] (in-vector #(a b c d) 1))
 (test-sequence [(b c d)] (in-vector #(a b c d e) 1 4))
 (test-sequence [(b d f)] (in-vector #(a b c d e f g h) 1 7 2))
@@ -33,8 +79,8 @@
 ;;; Test indices out of bounds
 ;(err/rt-test (for/list ([x (in-vector #(a b c d) 0 6 2)]) x) exn:fail:contract?)
 ;(err/rt-test (for/list ([x (in-vector #(a b c d) 6 0 -2)]) x) exn:fail:contract?)
-(check-exn exn:fail:contract? (λ () (~for/list ([x (in-vector #(a b c d) 0 6 2)]) x)))
-(check-exn exn:fail:contract? (λ () (~for/list ([x (in-vector #(a b c d) 6 0 -2)]) x)))
+(check-exn exn:fail:contract? (λ () (for/list ([x (in-vector #(a b c d) 0 6 2)]) x)))
+(check-exn exn:fail:contract? (λ () (for/list ([x (in-vector #(a b c d) 6 0 -2)]) x)))
 (test-sequence [(#\a #\b #\c)] "abc")
 (test-sequence [(#\a #\u3bb #\c)] "a\u03BBc")
 (test-sequence [(#\a #\b #\c)] (in-string "abc"))
@@ -56,8 +102,8 @@
 (test-sequence [(65 66 67)] (in-input-port-bytes (open-input-bytes #"ABC")))
 
 ;; Test optimized:
-(test '(2) 'in-list-of-list (~for/list ([v (in-list (list 1))]) (add1 v)))
-(test '(0) 'in-mlist-of-mlist (~for/list ([v (in-mlist (mlist 1))]) (sub1 v)))
+(test '(2) 'in-list-of-list (for/list ([v (in-list (list 1))]) (add1 v)))
+(test '(0) 'in-mlist-of-mlist (for/list ([v (in-mlist (mlist 1))]) (sub1 v)))
 
 (test-sequence [(1 2 3)] (in-port read (open-input-string "1 2 3")))
 (test-sequence [((123) 4)] (in-port read (open-input-string "(123) 4")))
@@ -77,9 +123,9 @@
                 (in-sequences (in-parallel (in-range 0 4) (in-range 10 14))
                               (in-parallel "abc" "ABC")))
 ;; Check empty sequences:
-(test '() 'empty-seq (~for/list ([v (in-sequences)]) v))
-(test '() 'empty-seq (~for/list ([v (in-sequences '())]) v))
-(test '() 'empty-seq (~for/list ([v (in-sequences '() '())]) v))
+(test '() 'empty-seq (for/list ([v (in-sequences)]) v))
+(test '() 'empty-seq (for/list ([v (in-sequences '())]) v))
+(test '() 'empty-seq (for/list ([v (in-sequences '() '())]) v))
 
 ;;; use in-parallel to get a finite number of items
 (test-sequence [(0 1 2 3 0 1 2 3) (0 1 2 3 4 5 6 7)]
@@ -97,93 +143,93 @@
 (test-sequence [(0 1 2) (a b c)] (in-parallel (in-range 3) (in-list '(a b c d))))
 (test-sequence [(0 1 2) (a b c)] (in-parallel (in-range 3) '(a b c)))
 
-(test-sequence [(a b c)] (stop-after (in-list '(a b c d e)) (~lambda (x) (equal? x 'c))))
-(test-sequence [(a b c)] (stop-before (in-list '(a b c d e)) (~lambda (x) (equal? x 'd))))
-(test-sequence [(3 4 5)] (stop-before (in-naturals 3) (~lambda (x) (= x 6))))
+(test-sequence [(a b c)] (stop-after (in-list '(a b c d e)) (lambda (x) (equal? x 'c))))
+(test-sequence [(a b c)] (stop-before (in-list '(a b c d e)) (lambda (x) (equal? x 'd))))
+(test-sequence [(3 4 5)] (stop-before (in-naturals 3) (lambda (x) (= x 6))))
 
 ;(test-sequence [(a b c) (0 1 2)] (in-indexed '(a b c)))
 
-(~let ()
-  (~define (counter) (~define n 0) (~lambda ([d 1]) (set! n (+ d n)) n))
+(let ()
+  (define (counter) (define n 0) (lambda ([d 1]) (set! n (+ d n)) n))
   ;; STEVE: how does this work? in-producer passes (void) to the fn produced by
   ;;        counter, resulting in a bad addition
   ;; answer: in-producer is actually *in-producer, which calls do-in:
-;  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter))] [y (in-range 4)]) x))
-;  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter))] #:break (= x 5)) x))
-  (test-sequence [(1 2 3 4)] (~for/list ([x (in-producer (counter) 5)]) x))
+;  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter))] [y (in-range 4)]) x))
+;  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter))] #:break (= x 5)) x))
+  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter) 5)]) x))
   (test-sequence [(1/2 1 3/2 2 5/2 3 7/2 4 9/2)]
-    (~for/list ([x (in-producer (counter) 5 1/2)]) x)))
+    (for/list ([x (in-producer (counter) 5 1/2)]) x)))
 
 (test-sequence [(1 2 3 4 5)]
   (parameterize ([current-input-port (open-input-string "1 2 3\n4 5")])
-    (~for/list ([i (in-producer read eof)]) i)))
+    (for/list ([i (in-producer read eof)]) i)))
 (test-sequence [(1 2 3 4 5)]
-  (~for/list ([i (in-producer read eof (open-input-string "1 2 3\n4 5"))]) i))
+  (for/list ([i (in-producer read eof (open-input-string "1 2 3\n4 5"))]) i))
 (test-sequence [("1 2 3" "4 5")]
-  (~for/list ([i (in-producer read-line eof-object? (open-input-string "1 2 3\n4 5"))]) i))
+  (for/list ([i (in-producer read-line eof-object? (open-input-string "1 2 3\n4 5"))]) i))
 (test-sequence [((1 2) (3 4) (5 ,eof))]
-  (~for/list ([(i j)
-              (in-producer (~lambda (p) (values (read p) (read p)))
-                           (~lambda (x y) (and (eof-object? x) (eof-object? y)))
+  (for/list ([(i j)
+              (in-producer (lambda (p) (values (read p) (read p)))
+                           (lambda (x y) (and (eof-object? x) (eof-object? y)))
                            (open-input-string "1 2 3\n4 5"))])
     (list i j)))
 
-(~let ([five-seq
-       (~lambda (pos pre post)
+(let ([five-seq
+       (lambda (pos pre post)
          (test-sequence [(1 2 3 4 5)]
-                        (make-do-sequence (~lambda ()
+                        (make-do-sequence (lambda ()
                                             (values add1
                                                     add1
                                                     0
                                                     pos 
                                                     pre 
                                                     post)))))])
-  (five-seq (~lambda (pos) (pos . < . 5))
+  (five-seq (lambda (pos) (pos . < . 5))
             #f
             #f)
   (five-seq #f
-            (~lambda (val) (val . < . 6))
+            (lambda (val) (val . < . 6))
             #f)
   (five-seq #f
             #f
-            (~lambda (pos val) (val . < . 5))))
+            (lambda (pos val) (val . < . 5))))
 
-(~let ([fives-seq
-       (~lambda (pos pre post)
+(let ([fives-seq
+       (lambda (pos pre post)
          (test-sequence [(1 2 3 4 5) ("0" "1" "2" "3" "4")]
-                        (make-do-sequence (~lambda ()
-                                            (values (~lambda (n) (values (add1 n)
+                        (make-do-sequence (lambda ()
+                                            (values (lambda (n) (values (add1 n)
                                                                         (number->string n)))
                                                     add1
                                                     0
                                                     pos 
                                                     pre 
                                                     post)))))])
-  (fives-seq (~lambda (pos) (pos . < . 5))
+  (fives-seq (lambda (pos) (pos . < . 5))
              #f
              #f)
   (fives-seq #f
-             (~lambda (val1 val2) (val1 . < . 6))
+             (lambda (val1 val2) (val1 . < . 6))
              #f)
   (fives-seq #f
-             (~lambda (val1 val2) (not (string=? val2 "5")))
+             (lambda (val1 val2) (not (string=? val2 "5")))
              #f)
   (fives-seq #f
              #f
-             (~lambda (pos val1 val2) (val1 . < . 5)))
+             (lambda (pos val1 val2) (val1 . < . 5)))
   (fives-seq #f
              #f
-             (~lambda (pos val1 val2) (not (string=? val2 "4")))))
+             (lambda (pos val1 val2) (not (string=? val2 "4")))))
 
 
 (test '(1 2 3)
       'three
-      (~for/list ([i 10])
+      (for/list ([i 10])
         #:break (= i 3)
         (add1 i)))
 (test '(1 2 3 4)
       'three
-      (~for/list ([i 10])
+      (for/list ([i 10])
         #:final (= i 3)
         (add1 i)))
 
@@ -193,7 +239,7 @@
 ;      'producer
 ;      (let ([c 0])
 ;        (cons
-;         (~for/list ([i (in-producer (lambda () (set! c (add1 c)) c))])
+;         (for/list ([i (in-producer (lambda () (set! c (add1 c)) c))])
 ;           #:break (= i 10)
 ;           (number->string i))
 ;         c)))
@@ -201,59 +247,59 @@
 ;      'producer
 ;      (let ([c 0])
 ;        (cons
-;         (~for*/list ([j '(0)]
+;         (for*/list ([j '(0)]
 ;                     [i (in-producer (lambda () (set! c (add1 c)) c))])
 ;           #:break (= i 10)
 ;           (number->string i))
 ;         c)))
 
 ;;; Basic sanity checks.
-(test '#(1 2 3 4) 'for/vector (~for/vector ((i (in-range 4))) (+ i 1)))
-(test '#(1 2 3 4) 'for/vector-fast (~for/vector #:length 4 ((i (in-range 4))) (+ i 1)))
-(test '#(1 2 3 4 0 0) 'for/vector-fast (~for/vector #:length 6 ((i (in-range 4))) (+ i 1)))
-(test '#(1 2 3 4 #f #f) 'for/vector-fast (~for/vector #:length 6 #:fill #f ((i (in-range 4))) (+ i 1)))
+(test '#(1 2 3 4) 'for/vector (for/vector ((i (in-range 4))) (+ i 1)))
+(test '#(1 2 3 4) 'for/vector-fast (for/vector #:length 4 ((i (in-range 4))) (+ i 1)))
+(test '#(1 2 3 4 0 0) 'for/vector-fast (for/vector #:length 6 ((i (in-range 4))) (+ i 1)))
+(test '#(1 2 3 4 #f #f) 'for/vector-fast (for/vector #:length 6 #:fill #f ((i (in-range 4))) (+ i 1)))
 
-(test '#(0 0 0 0 1 2 0 2 4) 'for*/vector (~for*/vector ((i (in-range 3))
+(test '#(0 0 0 0 1 2 0 2 4) 'for*/vector (for*/vector ((i (in-range 3))
                                                        (j (in-range 3)))
                                            (+ i j)
                                            (* i j)))
-(test '#(0 0 0 0 1 2 0 2 4) 'for*/vector-fast (~for*/vector #:length 9 ((i (in-range 3))
+(test '#(0 0 0 0 1 2 0 2 4) 'for*/vector-fast (for*/vector #:length 9 ((i (in-range 3))
                                                                        (j (in-range 3)))
                                                 (+ i j)
                                                 (* i j)))
 
 (test '#(0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 2 2 2 0 0 0 2 2 2 4 4 4)
-      'for*/vector-fast (~for*/vector #:length 27 ((i (in-range 3))
+      'for*/vector-fast (for*/vector #:length 27 ((i (in-range 3))
                                                    (j (in-range 3))
                                                    [k (in-range 3)])
                                       (+ i j)
                                       (* i j)))
 
 ;; Test for both length too long and length too short
-(~let ((v (make-vector 3)))
+(let ((v (make-vector 3)))
   (vector-set! v 0 0)
   (vector-set! v 1 1)
-  (~let ((w (~for/vector #:length 3 ((i (in-range 2))) i)))
+  (let ((w (for/vector #:length 3 ((i (in-range 2))) i)))
     (test v 'for/vector-short-iter w)))
 
-(~let ((v (make-vector 10)))
-  (~for* ((i (in-range 3))
+(let ((v (make-vector 10)))
+  (for* ((i (in-range 3))
          (j (in-range 3)))
     (vector-set! v (+ j (* i 3)) (+ i j)))
-  (~let ((w (~for*/vector #:length 10 ((i (in-range 3)) (j (in-range 3))) (+ i j))))
+  (let ((w (for*/vector #:length 10 ((i (in-range 3)) (j (in-range 3))) (+ i j))))
     (test v 'for*/vector-short-iter w)))
 
 (test 2 'for/vector-long-iter
-      (vector-length (~for/vector #:length 2 ((i (in-range 10))) i)))
+      (vector-length (for/vector #:length 2 ((i (in-range 10))) i)))
 (test 5 'for*/vector-long-iter 
-      (vector-length (~for*/vector #:length 5 ((i (in-range 3)) (j (in-range 3))) (+ i j))))
+      (vector-length (for*/vector #:length 5 ((i (in-range 3)) (j (in-range 3))) (+ i j))))
 
 ;; Test for many body expressions
-(~let* ((v (vector 1.0 2.0 3.0))
-       (v2 (~for/vector ((i (in-range 3))) 
+(let* ((v (vector 1.0 2.0 3.0))
+       (v2 (for/vector ((i (in-range 3))) 
              (vector-set! v i (+ (vector-ref v i) 1.0))
              (vector-ref v i)))
-       (v3 (~for/vector #:length 3 ((i (in-range 3)))
+       (v3 (for/vector #:length 3 ((i (in-range 3)))
              (vector-set! v i (+ (vector-ref v i) 1.0))
              (vector-ref v i))))
   (test (vector 2.0 3.0 4.0) 'for/vector-many-body v2)
@@ -262,16 +308,16 @@
 ;; Stop when a length is specified, even if the sequence continues:
 (test '#(0 1 2 3 4 5 6 7 8 9)
       'nat
-      (~for/vector #:length 10 ([i (in-naturals)]) i))
+      (for/vector #:length 10 ([i (in-naturals)]) i))
 (test '#((0 . 0) (1 . 0) (2 . 0) (3 . 0) (4 . 0) (5 . 0) (6 . 0) (7 . 0) (8 . 0) (9 . 0))
       'nats
-      (~for*/vector #:length 10 ([i (in-naturals)] [j (in-naturals)]) (cons j i)))
+      (for*/vector #:length 10 ([i (in-naturals)] [j (in-naturals)]) (cons j i)))
 (test '#((0 . 0) (1 . 0) (2 . 0) (3 . 0) (4 . 0) (0 . 1) (1 . 1) (2 . 1) (3 . 1) (4 . 1))
       'nat+5
-      (~for*/vector #:length 10 ([i (in-naturals)] [j (in-range 5)]) (cons j i)))
+      (for*/vector #:length 10 ([i (in-naturals)] [j (in-range 5)]) (cons j i)))
 (test '#(1 3 5 7 9 11 13 15 17 19)
       'parallel
-      (~for*/vector #:length 10 ([(i j) (in-parallel (in-naturals)
+      (for*/vector #:length 10 ([(i j) (in-parallel (in-naturals)
                                                     (in-naturals 1))])
                    (+ i j)))
 
@@ -281,62 +327,62 @@
 ;      'producer
 ;      (let ([c 0])
 ;        (cons
-;         (~for/vector #:length 10 ([i (in-producer (lambda () (set! c (add1 c)) c))]) 
+;         (for/vector #:length 10 ([i (in-producer (lambda () (set! c (add1 c)) c))]) 
 ;                     (number->string i))
 ;         c)))
 ;(test '(#("1" "2" "3" "4" "5" "6" "7" "8" "9" "10") . 10)
 ;      'producer
 ;      (let ([c 0])
 ;        (cons
-;         (~for*/vector #:length 10 ([j '(0)]
+;         (for*/vector #:length 10 ([j '(0)]
 ;                                   [i (in-producer (lambda () (set! c (add1 c)) c))])
 ;                      (number->string i))
 ;         c)))
 
 ;; Check empty clauses
-(~let ()
-  (~define vector-iters 0)
+(let ()
+  (define vector-iters 0)
   (test (vector 3.4 0 0 0)
         'no-clauses
-        (~for/vector #:length 4 ()
+        (for/vector #:length 4 ()
                     (set! vector-iters (+ 1 vector-iters))
                     3.4))
   (test 1 values vector-iters)
   (test (vector 3.4 0 0 0)
         'no-clauses
-        (~for*/vector #:length 4 ()
+        (for*/vector #:length 4 ()
                      (set! vector-iters (+ 1 vector-iters))
                      3.4))
   (test 2 values vector-iters))
 
-(check-equal? (~for/list () 1) (list 1))
-(check-equal? (~for*/list () 2) (list 2))
+(check-equal? (for/list () 1) (list 1))
+(check-equal? (for*/list () 2) (list 2))
 
 ;; Check #:when and #:unless:
 (test (vector 0 1 2 1 2)
       'when-#t
-      (~for/vector #:length 5
+      (for/vector #:length 5
                   ([x (in-range 3)]
                    #:when #t
                    [y (in-range 3)])
         (+ x y)))
 (test (vector 0 1 2 2 3)
       'when-...
-      (~for/vector #:length 5
+      (for/vector #:length 5
                   ([x (in-range 3)]
                    #:when (even? x)
                    [y (in-range 3)])
         (+ x y)))
 (test (vector 0 1 2 1 2)
       'unless-#f
-      (~for/vector #:length 5
+      (for/vector #:length 5
                   ([x (in-range 3)]
                    #:unless #f
                    [y (in-range 3)])
         (+ x y)))
 (test (vector 1 2 3 -1 -1)
       'unless-...
-      (~for/vector #:length 5
+      (for/vector #:length 5
                   #:fill -1
                   ([x (in-range 3)]
                    #:unless (even? x)
@@ -344,68 +390,68 @@
         (+ x y)))
 
 (test #hash((a . 1) (b . 2) (c . 3)) 'mk-hash
-      (~for/hash ([v (in-naturals)]
+      (for/hash ([v (in-naturals)]
                  [k '(a b c)])
                 (values k (add1 v))))
 (test #hasheq((a . 1) (b . 2) (c . 3)) 'mk-hasheq
-      (~for/hasheq ([v (in-naturals)]
+      (for/hasheq ([v (in-naturals)]
                    [k '(a b c)])
                   (values k (add1 v))))
 (test #hash((a . 3) (b . 3) (c . 3)) 'mk-hash
-      (~for*/hash ([k '(a b c)]
+      (for*/hash ([k '(a b c)]
                    [v (in-range 3)])
                   (values k (add1 v))))
 (test #hasheq((a . 3) (b . 3) (c . 3)) 'mk-hasheq
-      (~for*/hasheq ([k '(a b c)]
+      (for*/hasheq ([k '(a b c)]
                      [v (in-range 3)])
                     (values k (add1 v))))
 (test #hash((a . 1) (b . 2) (c . 3)) 'cp-hash
-      (~for/hash ([(k v) #hash((a . 1) (b . 2) (c . 3))])
+      (for/hash ([(k v) #hash((a . 1) (b . 2) (c . 3))])
                 (values k v)))
 (test #hash((a . 1) (b . 2) (c . 3)) 'cp-hash
-      (~for/hash ([(k v) (in-hash #hash((a . 1) (b . 2) (c . 3)))])
+      (for/hash ([(k v) (in-hash #hash((a . 1) (b . 2) (c . 3)))])
                 (values k v)))
 (test #hash((a . a) (b . b) (c . c)) 'cp-hash
-      (~for/hash ([k (in-hash-keys #hash((a . 1) (b . 2) (c . 3)))])
+      (for/hash ([k (in-hash-keys #hash((a . 1) (b . 2) (c . 3)))])
                 (values k k)))
 (test #hash((1 . 1) (2 . 2) (3 . 3)) 'cp-hash
-      (~for/hash ([v (in-hash-values #hash((a . 1) (b . 2) (c . 3)))])
+      (for/hash ([v (in-hash-values #hash((a . 1) (b . 2) (c . 3)))])
                 (values v v)))
 
 (test 1 'parallel-or-first
-      (~for/or (((a b) (in-parallel '(1 #f) '(#t #f)))) 
+      (for/or (((a b) (in-parallel '(1 #f) '(#t #f)))) 
               a))
 (test 1 'parallel-or-last
-      (~for/or (((a b) (in-parallel '(#f 1) '(#t #f)))) 
+      (for/or (((a b) (in-parallel '(#f 1) '(#t #f)))) 
               a))
 (test #f 'parallel-and-first
-      (~for/and (((a b) (in-parallel '(1 #f) '(#t #f)))) 
+      (for/and (((a b) (in-parallel '(1 #f) '(#t #f)))) 
               a))
 (test #f 'parallel-and-last
-      (~for/and (((a b) (in-parallel '(#f 1) '(#t #f)))) 
+      (for/and (((a b) (in-parallel '(#f 1) '(#t #f)))) 
               a))
 
-(test '(11) 'in-value (~for/list ([i (in-value 11)]) i))
-(~let ([(~vs more? next) (sequence-generate (in-value 13))])
+(test '(11) 'in-value (for/list ([i (in-value 11)]) i))
+(let ([(~vs more? next) (sequence-generate (in-value 13))])
   (check-true (more?))
   (check-equal? 13 (next))
   (check-false (more?)))
 
 ;; check ranges on `in-vector', especially as a value
-(test '() 'in-empty-vector (~let ([v (in-vector '#())]) (~for/list ([e v]) e)))
-(test '() 'in-empty-vector (~let ([v (in-vector '#() 0)]) (~for/list ([e v]) e)))
-(test '() 'in-empty-vector (~let ([v (in-vector '#() 0 0)]) (~for/list ([e v]) e)))
-(test '() 'in-empty-vector (~let ([v (in-vector '#(1) 1 1)]) (~for/list ([e v]) e)))
-(test '() 'in-empty-vector (~let ([v (in-vector '#(1) 0 0)]) (~for/list ([e v]) e)))
-(test '(1) 'in-empty-vector (~let ([v (in-vector '#(1) 0 1)]) (~for/list ([e v]) e)))
+(test '() 'in-empty-vector (let ([v (in-vector '#())]) (for/list ([e v]) e)))
+(test '() 'in-empty-vector (let ([v (in-vector '#() 0)]) (for/list ([e v]) e)))
+(test '() 'in-empty-vector (let ([v (in-vector '#() 0 0)]) (for/list ([e v]) e)))
+(test '() 'in-empty-vector (let ([v (in-vector '#(1) 1 1)]) (for/list ([e v]) e)))
+(test '() 'in-empty-vector (let ([v (in-vector '#(1) 0 0)]) (for/list ([e v]) e)))
+(test '(1) 'in-empty-vector (let ([v (in-vector '#(1) 0 1)]) (for/list ([e v]) e)))
 
 (test '(1 2 3)
       'sequence-syntax-with-keywords
-      (~let ()
-        (~define (in-X #:x seq) seq)
-        (~for/list ([x (in-X #:x '(1 2 3))]) x)
+      (let ()
+        (define (in-X #:x seq) seq)
+        (for/list ([x (in-X #:x '(1 2 3))]) x)
         ;; => '(1 2 3)
         (define-sequence-syntax in-X* (lambda () #'in-X) (lambda (stx) #f))
-        (~for/list ([x (in-X* #:x '(1 2 3))]) x)))
+        (for/list ([x (in-X* #:x '(1 2 3))]) x)))
 
 ;;(report-errs)
