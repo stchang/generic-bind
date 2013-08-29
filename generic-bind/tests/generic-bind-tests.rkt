@@ -1,6 +1,6 @@
 #lang racket
 (require rackunit)
-(require "generic-bind.rkt")
+(require "../generic-bind.rkt")
 
 ;; define non-fns
 (~define x1 (+ 1 2))

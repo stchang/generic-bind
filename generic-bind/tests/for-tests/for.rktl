@@ -6,7 +6,7 @@
 ;
 (require compatibility/mlist
          "for-util.rkt")
-(require rackunit "../generic-bind.rkt")
+(require rackunit "../../generic-bind.rkt")
 
 (test-sequence [(0 1 2)] 3)
 (test-sequence [(0 1 2)] (in-range 3))

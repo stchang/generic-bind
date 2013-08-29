@@ -4,7 +4,7 @@
 
 (provide test-multi-sequence
          test-sequence)
-(require "../generic-bind.rkt")
+(require "../../generic-bind.rkt")
 
 ;; Utilities used by various tests of sequences
 
