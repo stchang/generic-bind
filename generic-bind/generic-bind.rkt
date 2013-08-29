@@ -80,7 +80,7 @@
   ;; - for example, values can't be used in function defs
   ;; - so this is a subset of :bind, which is used in things like fn defs
   (define-syntax-class bind/non-let
-    #:description "a generic bind instance that supports non-let contexts"
+    #:description "a generic bind instance for define contexts"
     #:auto-nested-attributes
     (pattern :bind 
              #:fail-when (bind-let-only? #'expanded-b)

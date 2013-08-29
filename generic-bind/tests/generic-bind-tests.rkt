@@ -132,7 +132,6 @@
 
 ;; ~let*
 (check-equal? (~let* ([x 46436] [y x]) y) 46436)
-;(check-equal? 
 (check-equal? (~let* ([($ (list x y)) (list 1010 2020)] [z (+ x y)]) z) 3030)
 (check-equal? (~let* ([(⋈ v1 v2) (values 4040 5050)] [z (+ v1 v2)]) z) 9090)
 (check-equal? (~let* ([(⋈ v3 ($ (list xy yx))) (values 202 (list 303 404))] 
@@ -287,8 +286,8 @@
  '((4 1 8 7)))
 (check-equal? (~for/list ([x '(1 2 3)] #:break (= x 2)) x) '(1))
 (check-equal? (~for/list ([x '(1 2 3)] #:final (= x 2)) x) '(1 2))
-(check-equal? (~for/list ([x '(1 2 3)]) #:break (= x 2) x) '(1))
-(check-equal? (~for/list ([x '(1 2 3)]) #:final (= x 2) x) '(1 2))
+(check-equal? (~for*/list ([x '(1 2 3)]) #:break (= x 2) x) '(1))
+(check-equal? (~for*/list ([x '(1 2 3)]) #:final (= x 2) x) '(1 2))
 
 (check-equal?
  (~for/list ([x '(1 2 3)] #:when #t [y '(4 5 6)] #:when #t) (list x y))
