@@ -1,0 +1,10 @@
+******** 2013-08-25 ********
+common errors and their causes:
+
+** Error: "expected a generic bind instance in: ( ... )"
+** Probable cause: 
+ Not properly splicing a syntax-splicing-class pattern variable.
+
+** Error: "no #%app transformer" (or other weird errors)
+** Probable cause:
+ Bad local-expand and you're not catcing the error properly.
