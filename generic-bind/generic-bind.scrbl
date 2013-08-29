@@ -277,6 +277,9 @@ In the working @racket[~vs] example above, since @racket[~vs] is not allowed in 
                ([db define-allowable-generic-bind identifier?]
                 [b generic-bind identifier?])]{
   Same as @racket[let], but with generic bind support. If a name is given to the let, then the bindings must be define-allowable, since it's essentially defining a function. If no name is given to the @racket[~let], then any generic bind is allowed.
+
+Note that when using the match @racket[$] binding with @racket[~let], the behavior is NOT like @racket[match-let], in that there is no coupling between between the binding positions. This means that trying to bind duplicate identifiers in a @racket[$] match pattern will produce the same results or errors as in @racket[let], @racket[let*], or @racket[letrec].
+
 @examples[#:eval the-eval
 (define x55 155)
 (~let ([x55 (add1 x55)]) x55); 156)
