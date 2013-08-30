@@ -413,8 +413,8 @@
                [() #`(call-with-values (λ () body ...)
                                        (λ res (apply combiner accum ... res)))]
                [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
-                #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
-                #:with (seq-next ...) (generate-temporaries #'(b ...))
+                #:with (more? ...) (generate-temporaries #'(b ...))
+                #:with (next ...) (generate-temporaries #'(b ...))
                 #:with new-loop (generate-temporary)
                 #:with skip-it #'(new-loop accum ...)
                 #:with do-it 
@@ -430,11 +430,12 @@
                         [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
                         [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
                         [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
-                #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
+                #`(let-values ([(more? next) (sequence-generate seq)] ...)
                     ;; must shadow accum in new loop, in case body references it
                     (let new-loop ([accum accum] ...)
-                      (if (and (seq-not-empty?) ... (not (break? accum ...)))
-                          (~let ([b (seq-next)] ...) conditional-body)
+                      ;; must check break? first, bc more? pulls an item
+                      (if (and (not (break? accum ...)) (more?) ...)
+                          (~let ([b (next)] ...) conditional-body)
                           (values accum ...))))])))
      #'(call-with-values (λ () expanded-for) final)]
     ;; this clause has unnamed accums, name them and then call the first clause

@@ -7,6 +7,7 @@
 (require compatibility/mlist
          "for-util.rkt")
 (require rackunit)
+
 (require 
  (rename-in 
   "../../generic-bind.rkt"
@@ -154,8 +155,9 @@
   ;; STEVE: how does this work? in-producer passes (void) to the fn produced by
   ;;        counter, resulting in a bad addition
   ;; answer: in-producer is actually *in-producer, which calls do-in:
-;  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter))] [y (in-range 4)]) x))
-;  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter))] #:break (= x 5)) x))
+  ;; 2013-08-30: fixed
+  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter))] [y (in-range 4)]) x))
+  (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter))] #:break (= x 5)) x))
   (test-sequence [(1 2 3 4)] (for/list ([x (in-producer (counter) 5)]) x))
   (test-sequence [(1/2 1 3/2 2 5/2 3 7/2 4 9/2)]
     (for/list ([x (in-producer (counter) 5 1/2)]) x)))
@@ -233,25 +235,25 @@
         #:final (= i 3)
         (add1 i)))
 
-;; STEVE: more in-producer problem cases
+;; STEVE: more in-producer problem cases, 2013-08-30: fixed
 ;; Make sure that breaking a sequence stops before consuming another element:
-;(test '(("1" "2" "3" "4" "5" "6" "7" "8" "9") . 10)
-;      'producer
-;      (let ([c 0])
-;        (cons
-;         (for/list ([i (in-producer (lambda () (set! c (add1 c)) c))])
-;           #:break (= i 10)
-;           (number->string i))
-;         c)))
-;(test '(("1" "2" "3" "4" "5" "6" "7" "8" "9") . 10)
-;      'producer
-;      (let ([c 0])
-;        (cons
-;         (for*/list ([j '(0)]
-;                     [i (in-producer (lambda () (set! c (add1 c)) c))])
-;           #:break (= i 10)
-;           (number->string i))
-;         c)))
+(test '(("1" "2" "3" "4" "5" "6" "7" "8" "9") . 10)
+      'producer
+      (let ([c 0])
+        (cons
+         (for/list ([i (in-producer (lambda () (set! c (add1 c)) c))])
+           #:break (= i 10)
+           (number->string i))
+         c)))
+(test '(("1" "2" "3" "4" "5" "6" "7" "8" "9") . 10)
+      'producer
+      (let ([c 0])
+        (cons
+         (for*/list ([j '(0)]
+                     [i (in-producer (lambda () (set! c (add1 c)) c))])
+           #:break (= i 10)
+           (number->string i))
+         c)))
 
 ;;; Basic sanity checks.
 (test '#(1 2 3 4) 'for/vector (for/vector ((i (in-range 4))) (+ i 1)))
@@ -321,23 +323,23 @@
                                                     (in-naturals 1))])
                    (+ i j)))
 
-;; STEVE: more in-producer problem cases
+;; STEVE: more in-producer problem cases, 2013-08-30: fixed
 ;; Make sure the sequence stops at the length before consuming another element:
-;(test '(#("1" "2" "3" "4" "5" "6" "7" "8" "9" "10") . 10)
-;      'producer
-;      (let ([c 0])
-;        (cons
-;         (for/vector #:length 10 ([i (in-producer (lambda () (set! c (add1 c)) c))]) 
-;                     (number->string i))
-;         c)))
-;(test '(#("1" "2" "3" "4" "5" "6" "7" "8" "9" "10") . 10)
-;      'producer
-;      (let ([c 0])
-;        (cons
-;         (for*/vector #:length 10 ([j '(0)]
-;                                   [i (in-producer (lambda () (set! c (add1 c)) c))])
-;                      (number->string i))
-;         c)))
+(test '(#("1" "2" "3" "4" "5" "6" "7" "8" "9" "10") . 10)
+      'producer
+      (let ([c 0])
+        (cons
+         (for/vector #:length 10 ([i (in-producer (lambda () (set! c (add1 c)) c))]) 
+                     (number->string i))
+         c)))
+(test '(#("1" "2" "3" "4" "5" "6" "7" "8" "9" "10") . 10)
+      'producer
+      (let ([c 0])
+        (cons
+         (for*/vector #:length 10 ([j '(0)]
+                                   [i (in-producer (lambda () (set! c (add1 c)) c))])
+                      (number->string i))
+         c)))
 
 ;; Check empty clauses
 (let ()
