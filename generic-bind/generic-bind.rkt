@@ -415,6 +415,51 @@
 ;; base(s) must be a list due to possible multiple vals
 (define-syntax (~for/common stx) ; essentially a foldl (ie uses an accum(s))
   (syntax-parse stx
+    ;; handle one accum case separately
+    ;; -- for performance -- done need call-with-values
+    [(_ (~optional (~seq #:final final))
+        combiner
+        (~optional (~seq #:break? break?))
+        ([accum base])
+        (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with expanded-for
+     #`(let ([accum base])
+         #,(let stxloop ([cs #'(c ... bb ...)])
+             (syntax-parse cs
+               #;[() #'(combiner accum (begin body ...))]
+               [() #`(call-with-values (λ () body ...)
+                                       (λ res (apply combiner accum res)))]
+               [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
+                #:with (more? ...) (generate-temporaries #'(b ...))
+                #:with (next ...) (generate-temporaries #'(b ...))
+                #:with new-loop (generate-temporary)
+                #:with skip-it #'(new-loop accum)
+                #:with do-it #`(new-loop #,(stxloop #'(rst ...)))
+                #:with its-done #'accum
+                #:with one-more-time (stxloop #'(rst ...))
+                #:with conditional-body
+                (let whenloop ([ws (syntax->list #'((w) ...))])
+                  (if (null? ws)
+                      #'do-it
+                      (syntax-parse (car ws)
+                        [((#:when guard)) 
+                         (if (eq? (syntax-e #'guard) #t)
+                             (whenloop (cdr ws))
+                             #`(if guard #,(whenloop (cdr ws)) skip-it))]
+                        [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
+                        [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
+                        [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
+                #`(let-values ([(more? next) (sequence-generate seq)] ...)
+                    ;; must shadow accum in new loop, in case body references it
+                    (let new-loop ([accum accum])
+                      ;; must check break? first, bc more? pulls an item
+                      (if (and #,@(if (attribute break?) 
+                                      #'((not (break? accum)))
+                                      #'())
+                               (more?) ...)
+                          (~let ([b (next)] ...) conditional-body)
+                          accum)))])))
+     (if (attribute final) #'(final expanded-for) #'expanded-for)]
     ;; this clause allows naming of the accums so the body can reference them
     ;; -- used by for/fold and for/lists
     [(_ (~optional (~seq #:final final))
