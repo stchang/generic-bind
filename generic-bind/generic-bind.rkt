@@ -417,7 +417,10 @@
   (syntax-parse stx
     ;; this clause allows naming of the accums so the body can reference them
     ;; -- used by for/fold and for/lists
-    [(_ final combiner (~optional (~seq #:break? break?)) ([accum base] ...)
+    [(_ (~optional (~seq #:final final))
+        combiner
+        (~optional (~seq #:break? break?))
+        ([accum base] ...)
         (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
      #`(let ([accum base] ...)
@@ -456,12 +459,18 @@
                                (more?) ...)
                           (~let ([b (next)] ...) conditional-body)
                           (values accum ...))))])))
-     #'(call-with-values (λ () expanded-for) final)]
+     (if (attribute final)
+         #'(call-with-values (λ () expanded-for) final)
+         #'expanded-for)]
     ;; this clause has unnamed accums, name them and then call the first clause
-    [(_ final combiner (~optional (~seq #:break? break?)) (base ...) 
+    [(_ (~optional (~seq #:final final))
+        combiner
+        (~optional (~seq #:break? break?))
+        (base ...) 
         (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with (accum ...) (generate-temporaries #'(base ...))
-     #`(~for/common final combiner 
+     #`(~for/common #,@(if (attribute final) #'(#:final final) #'())
+                    combiner 
                     #,@(if (attribute break?) #'(#:break? break?) #'())
                     ([accum base] ...) 
                     #,@(template (((?@ . c) ...) (?@ . bb) ... body ...)))]))
@@ -469,7 +478,10 @@
 ;; inserts #:when #t between each (non-#:when/unless) clause
 (define-syntax (~for*/common stx)
   (syntax-parse stx
-    [(_ fin comb (~optional (~seq #:break? b?)) (base ...) 
+    [(_ (~optional (~seq #:final fin))
+        comb
+        (~optional (~seq #:break? b?))
+        (base ...) 
         ((~seq sb:seq-binding ... wb:when-or-break ...) ...) body ...)
      #:with ((new-sb ...) ...)
      ;; append accounts for list added by splicing-syntax-class
@@ -480,29 +492,31 @@
      ;; wb is also a list (due to splicing-stx-class)
      #:with (new-clause ...) 
        (template ((?@ . (new-sb ... (?@ . ((?@ . wb) ...)))) ...))
-     #`(~for/common fin comb 
+     #`(~for/common #,@(if (attribute fin) #'(#:final fin) #'())
+                    comb 
                     #,@(if (attribute b?) #'(#:break? b?) #'())
                     (base ...) (new-clause ...) body ...)]))
 
 (define-syntax (mk~for/ stx)
   (syntax-parse stx 
-    [(_ name combiner (base ...)
-        (~optional (~seq #:final fin) #:defaults ([fin #'id-fn]))
-        (~optional (~seq #:break? b?)))
+    [(_ name combiner (base ...) (~optional (~seq #:final fin))
+                                 (~optional (~seq #:break? b?)))
      #:with new-name (format-id #'name "~~for/~a" #'name)
      #:with new-name* (format-id #'name "~~for*/~a" #'name)
      #`(begin 
          (define-syntax-rule (new-name x (... ...)) 
-           (~for/common fin combiner 
+           (~for/common #,@(if (attribute fin) #'(#:final fin) #'())
+                        combiner 
                         #,@(if (attribute b?) #'(#:break? b?) #'())
                         (base ...) x (... ...)))
          (define-syntax-rule (new-name* x (... ...)) 
-           (~for*/common fin combiner 
+           (~for*/common #,@(if (attribute fin) #'(#:final fin) #'()) 
+                         combiner 
                          #,@(if (attribute b?) #'(#:break? b?) #'())
                          (base ...) x (... ...))))]))
 
-(define-syntax-rule (~for x ...) (~for/common void void ((void)) x ...))
-(define-syntax-rule (~for* x ...) (~for*/common void void ((void)) x ...))
+(define-syntax-rule (~for x ...) (~for/common #:final void void ((void)) x ...))
+(define-syntax-rule (~for* x ...) (~for*/common #:final void void ((void)) x ...))
 
 ;; ~for/list ~for*/list and ~for/lists probably need a "right folding" for/common
 ;;   but for now, just reverse the output
@@ -525,7 +539,7 @@
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for/common
-                values (λ (accum ... res ...) (values res ...))
+                #:final values (λ (accum ... res ...) (values res ...))
                 ([accum init] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 (define-syntax (~for*/fold stx)
   (syntax-parse stx
@@ -533,7 +547,7 @@
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for*/common 
-                values (λ (accum ... res ...) (values res ...))
+                #:final values (λ (accum ... res ...) (values res ...))
                 ([accum init] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 
 (define-syntax (~for/lists stx)
@@ -542,7 +556,7 @@
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for/common 
-                (λ (accum ...) (values (reverse accum) ...))
+                #:final (λ (accum ...) (values (reverse accum) ...))
                 (λ (accum ... res ...) (values (cons res accum) ...))
                 ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 (define-syntax (~for*/lists stx)
@@ -551,7 +565,7 @@
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for*/common 
-                (λ (accum ...) (values (reverse accum) ...))
+                #:final (λ (accum ...) (values (reverse accum) ...))
                 (λ (accum ... res ...) (values (cons res accum) ...))
                 ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 
@@ -571,6 +585,7 @@
                      [vec-expandable? #t]))
          (define i 0)
          (~for/common 
+          #:final
           (λ _ (if vec-expandable? ; final
                    (let ([new-vec (make-vector i)])
                      (vector-copy! new-vec 0 vec 0 i)
@@ -606,6 +621,7 @@
                      [vec-expandable? #t]))
          (define i 0)
          (~for*/common 
+          #:final
           (λ _ (if vec-expandable? ; final
                    (let ([new-vec (make-vector i)])
                      (vector-copy! new-vec 0 vec 0 i)
