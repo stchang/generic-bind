@@ -87,6 +87,13 @@
               10)
 (check-equal? ((~λ (x y ($ (A a b))) (+ x y a b)) 10 20 (A 30 40)) 100)
 
+;; kw and default-arg lambda examples
+(check-equal? ((~λ ([($: x xs) (list 1 2)]) (+ x (length xs) 20))) 22)
+(check-equal? ((~λ ([($: x xs) (list 1 2)]) (+ x (length xs) 20)) (list 1 2 3 4)) 24)
+(check-equal? ((~λ (#:C ($: x xs)) (append xs (list x))) #:C (list 1 2 3)) (list 2 3 1))
+(check-equal? ((~λ (#:D [($: x xs) (list 10 20 30)]) (append xs (list x)))) (list 20 30 10))
+(check-equal? ((~λ (#:D [($: x xs) (list 10 20 30)]) (append xs (list x))) #:D (list 1 2 3)) (list 2 3 1))
+
 ;; example for spurious defines in nested generic binds
 (~define (⋈ ($ (cons x20 x21)) y22) (values (cons 56 67) 78))
 (check-equal? x20 56) (check-equal? x21 67) (check-equal? y22 78)

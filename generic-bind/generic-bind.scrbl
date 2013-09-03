@@ -168,33 +168,56 @@ Argument-with-default and keyword binding positions support generic bindings too
   Same as @racket[lambda] but each binding site may be either an identifier or a (define-allowable) generic binding instance. (So the @racket[~vs] values-binding form is not allowed.)
           
   If a single identifier is given with no parentheses, then the arguments are put in a list, just like @racket[lambda]. A single generic bind instance may also be used without parens. If a list of bindings if given, then each may be either an identifier or a generic bind instance.
-@examples[#:eval the-eval
-((~lambda ($: x xs) (append xs (list x))) (list 1 2 3 4 5)); (list 2 3 4 5 1))
-((~lambda (f ($: x xs)) (cons (f x) xs)) add1 (list 1 2 3 4)); (list 2 2 3 4))
-((~lambda (f ($list)) (f 1)) add1 null); 2)
-((~lambda (f ($list)) (f 1)) add1 (list 1 2 3)) ; err
 
+@defform[(~lam ...)]{ Same as @racket[~lambda].}
+@defform[(~l ...)]{ Same as @racket[~lambda].}
+@defform[(~λ ...)]{ Same as @racket[~lambda].}
+
+Examples of standard, @racket[lambda]-like behavior:
+@interaction[#:eval the-eval
 ((~λ (x) x) 111); 111)
 ((~λ rst rst) 1 2 3); (list 1 2 3))
 ((~λ (x [y 0] #:z z #:a [a 10]) (+ x y z a)) 1 #:z 10); 21)
 ((~λ (x [y 0] #:z z #:a [a 10]) (+ x y z a)) 1 22 #:z 10); 43)
 ((~λ (x [y 0] #:z z #:a [a 10]) (+ x y z a)) 1 #:z 10 #:a 111); 122)
 ((~lambda (x [y 0] #:z z #:a [a 10]) (+ x y z a)) 1 #:z 10 #:a 111); 122)
+]
 
-;; single arg
-((~λ ($ (list x y)) (+ x y)) (list 14 56)); 70)
-((~λ (~vs v1 v2) (+ ~vs v1 v2)) 1 2 3); 6) ;; shadow ~vs
-(~λ ((~vs v1 v2)) (+ v1 v2)) ; error
+Examples with generic bind forms:
+@interaction[#:eval the-eval
+((~lambda ($: x xs) (append xs (list x))) (list 1 2 3 4 5)); (list 2 3 4 5 1))
+((~lambda (f ($: x xs)) (cons (f x) xs)) add1 (list 1 2 3 4)); (list 2 2 3 4))
+((~lambda (f ($list)) (f 1)) add1 null); 2)
+((~lambda (f ($list)) (f 1)) add1 (list 1 2 3)) ; err
 ((~λ (($ (list x y)) ($ (cons a b))) (+ a b x y)) 
                (list 1 2) (cons 3 4));
 ;              10)
 ((~λ (x y ($ (A a b))) (+ x y a b)) 10 20 (A 30 40)); 100)
 ]
-In the working @racket[~vs] example above, since @racket[~vs] is not allowed in this context, it is treated as an identifier and shadows the existing binding for @racket[~vs].}
 
-@defform[(~lam ...)]{ Same as @racket[~lambda].}
-@defform[(~l ...)]{ Same as @racket[~lambda].}
-@defform[(~λ ...)]{ Same as @racket[~lambda].}
+Example of single-arg generic bind support:
+@interaction[#:eval the-eval
+;; single arg
+((~λ ($ (list x y)) (+ x y)) (list 14 56)); 70)
+]
+
+The next example may look like a single-arg generic bind, but since @racket[~vs] is not allowed in this context, it is treated as an identifier and shadows the existing binding for @racket[~vs].
+@interaction[#:eval the-eval
+((~λ (~vs v1 v2) (+ ~vs v1 v2)) 1 2 3); 6) ;; shadow ~vs
+]
+Here is a disallowed generic bind used in the standard way, resulting in an error:
+@interaction[#:eval the-eval
+(~λ ((~vs v1 v2)) (+ v1 v2)) ; error
+]
+
+Generic bind forms are allowed in keyword and arg-with-default binding positions too:
+@interaction[#:eval the-eval
+((~λ ([($: x xs) (list 1 2)]) (+ x (length xs) 20))); 22)
+((~λ ([($: x xs) (list 1 2)]) (+ x (length xs) 20)) (list 1 2 3 4)); 24)
+((~λ (#:C ($: x xs)) (append xs (list x))) #:C (list 1 2 3)); (list 2 3 1))
+((~λ (#:D [($: x xs) (list 10 20 30)]) (append xs (list x)))); (list 20 30 10))
+((~λ (#:D [($: x xs) (list 10 20 30)]) (append xs (list x))) #:D (list 1 2 3)); (list 2 3 1))
+]}
 
 @defform/subs[(~case-lambda clause ...)
               ([clause (header body ...)])]{
