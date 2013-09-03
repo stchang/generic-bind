@@ -415,51 +415,6 @@
 ;; base(s) must be a list due to possible multiple vals
 (define-syntax (~for/common stx) ; essentially a foldl (ie uses an accum(s))
   (syntax-parse stx
-    ;; handle one accum case separately
-    ;; -- for performance -- done need call-with-values
-    [(_ (~optional (~seq #:final final))
-        combiner
-        (~optional (~seq #:break? break?))
-        ([accum base])
-        (c:for-clause ...) bb:break-clause ... body:expr ...)
-     #:with expanded-for
-     #`(let ([accum base])
-         #,(let stxloop ([cs #'(c ... bb ...)])
-             (syntax-parse cs
-               #;[() #'(combiner accum (begin body ...))]
-               [() #`(call-with-values (λ () body ...)
-                                       (λ res (apply combiner accum res)))]
-               [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
-                #:with (more? ...) (generate-temporaries #'(b ...))
-                #:with (next ...) (generate-temporaries #'(b ...))
-                #:with new-loop (generate-temporary)
-                #:with skip-it #'(new-loop accum)
-                #:with do-it #`(new-loop #,(stxloop #'(rst ...)))
-                #:with its-done #'accum
-                #:with one-more-time (stxloop #'(rst ...))
-                #:with conditional-body
-                (let whenloop ([ws (syntax->list #'((w) ...))])
-                  (if (null? ws)
-                      #'do-it
-                      (syntax-parse (car ws)
-                        [((#:when guard)) 
-                         (if (eq? (syntax-e #'guard) #t)
-                             (whenloop (cdr ws))
-                             #`(if guard #,(whenloop (cdr ws)) skip-it))]
-                        [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
-                        [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
-                        [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
-                #`(let-values ([(more? next) (sequence-generate seq)] ...)
-                    ;; must shadow accum in new loop, in case body references it
-                    (let new-loop ([accum accum])
-                      ;; must check break? first, bc more? pulls an item
-                      (if (and #,@(if (attribute break?) 
-                                      #'((not (break? accum)))
-                                      #'())
-                               (more?) ...)
-                          (~let ([b (next)] ...) conditional-body)
-                          accum)))])))
-     (if (attribute final) #'(final expanded-for) #'expanded-for)]
     ;; this clause allows naming of the accums so the body can reference them
     ;; -- used by for/fold and for/lists
     [(_ (~optional (~seq #:final final))
@@ -468,6 +423,7 @@
         ([accum base] ...)
         (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
+     (let ([one-accum? (= 1 (length (syntax->list #'(accum ...))))])
      #`(let ([accum base] ...)
          #,(let stxloop ([cs #'(c ... bb ...)])
              (syntax-parse cs
@@ -479,8 +435,11 @@
                 #:with new-loop (generate-temporary)
                 #:with skip-it #'(new-loop accum ...)
                 #:with do-it 
-                  #`(call-with-values (λ () #,(stxloop #'(rst ...))) new-loop)
-                #:with its-done #'(values accum ...)
+                (if one-accum?
+                    #`(new-loop #,(stxloop #'(rst ...)))
+                    #`(call-with-values (λ () #,(stxloop #'(rst ...))) new-loop))
+                #:with its-done 
+                (if one-accum? (car (syntax->list #'(accum ...))) #'(values accum ...))
                 #:with one-more-time (stxloop #'(rst ...))
                 #:with conditional-body
                 (let whenloop ([ws (syntax->list #'((w) ...))])
@@ -503,9 +462,12 @@
                                       #'())
                                (more?) ...)
                           (~let ([b (next)] ...) conditional-body)
-                          (values accum ...))))])))
+                          #,@(if one-accum? #'(accum ...) 
+                                            #'((values accum ...))))))]))))
      (if (attribute final)
-         #'(call-with-values (λ () expanded-for) final)
+         (if (= 1 (length (syntax->list #'(accum ...)))) ; one accum
+             #'(final expanded-for)
+             #'(call-with-values (λ () expanded-for) final))
          #'expanded-for)]
     ;; this clause has unnamed accums, name them and then call the first clause
     [(_ (~optional (~seq #:final final))
