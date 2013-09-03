@@ -217,17 +217,30 @@
     ;; actually, this needs to be first, if I want to allow
     ;; generic binding identifiers
     (pattern :bind/non-let
-             #:attr new-arg #`(#,(generate-temporary))
-             #:attr def #`((definer ids #,(car (syntax->list #'new-arg)))))
+             #:attr tmp (generate-temporary)
+             #:attr new-arg #'(tmp)
+             #:attr def #`((definer ids tmp)))
     (pattern name:id 
              #:attr new-arg #'(name)
              #:attr def #'())
+    (pattern [:bind/non-let default] 
+             #:attr tmp (generate-temporary)
+             #:attr new-arg #'([tmp default])
+             #:attr def #'((definer ids tmp)))
     (pattern [name:id default] 
              #:attr new-arg #'([name default])
              #:attr def #'())
+    (pattern (~seq kw:keyword :bind/non-let) 
+             #:attr tmp (generate-temporary)
+             #:attr new-arg #'(kw tmp)
+             #:attr def #'((definer ids tmp)))
     (pattern (~seq kw:keyword name:id) 
              #:attr new-arg #'(kw name)
              #:attr def #'())
+    (pattern (~seq kw:keyword [:bind/non-let default]) 
+             #:attr tmp (generate-temporary)
+             #:attr new-arg #'(kw [tmp default])
+             #:attr def #'((definer ids tmp)))
     (pattern (~seq kw:keyword [name:id default]) 
              #:attr new-arg #'(kw [name default])
              #:attr def #'()))

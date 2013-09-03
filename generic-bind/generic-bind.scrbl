@@ -70,14 +70,17 @@ A few generic binding instances are currently supported. Currently, defining new
 
 When using @racket[~define] to define a function, any generic binding must be define-allowable. (So the @racket[~vs] values-binding form is not allowed.)
           
-Non-function examples:
-@examples[#:eval the-eval
+@racket[define]-like, non-function examples:
+@interaction[#:eval the-eval
 (~define x1 (+ 1 2))
 x1 ; 3
 
 (~define x2 (list 1 2))
 x2 ; (list 1 2)
+]
 
+Non-function examples with generic bind forms:
+@interaction[#:eval the-eval
 (~define ($ (list y1 y2)) (list 10 20))
 y1 ; 10 
 y2 ; 20
@@ -98,8 +101,9 @@ x6 ;9999
 x7;101
 y7 ;202)
 ]
-Function examples:
-@examples[#:eval the-eval
+
+@racket[define]-like function examples:
+@interaction[#:eval the-eval
 (~define (f1 x [y 10] #:z [z 0]) (+ x y z))
 (f1 100) ; 110
 (f1 100 200) ; 300
@@ -111,7 +115,10 @@ Function examples:
 (~define (f4 x y . rst) (cons x (cons y rst)))
 (f4 1 2 3 4 5 6); (list 1 2 3 4 5 6))
 (f4 1 2); (list 1 2))
+]
 
+Function examples using generic bind forms:
+@interaction[#:eval the-eval
 (~define (f2 ($ (list x y))) (- x y))
 (f2 (list 145 45)); 100)
 (~define (g1 ($ (list (list a b) y ...))) (apply + a b y))
@@ -136,6 +143,22 @@ Function examples:
 (f21 (list 10 20 30 40 50 60 70 80 90)); 18)
 ]}
 
+Argument-with-default and keyword binding positions support generic bindings too:
+@interaction[#:eval the-eval
+;; generic-bind in keyword or arg-with-default positions
+(~define (fkw1 [($list x y) (list 1 2)]) (+ x y 10))
+(fkw1); 13)
+(fkw1 (list 10 20)); 40)
+(fkw1 10) ; exn:misc:match
+
+(~define (fkw2 #:A ($list x y)) (+ x y 10))
+(fkw2 #:A (list 1 2)); 13)
+
+(~define (fkw3 #:B [($list x y) (list 1 2)]) (+ x y 10))
+(fkw3 #:B (list 10 20)); 40)
+(fkw3 #:B 10) ;exn:misc:match
+]
+                                                                   
 @defform[(~def ...)]{ Same as @racket[~define].}
 @defform[(~d ...)]{ Same as @racket[~define].}
                                          

@@ -44,6 +44,22 @@
 (check-equal? (f5 (list (list 1 2) 3)) (list 1 2 3))
 (check-equal? (f5 (list (list 1 2) 3) 4 5) (list 1 2 3 4 5))
 
+;; generic-bind in keyword or arg-with-default positions
+(~define (fkw1 [($list x y) (list 1 2)]) (+ x y 10))
+(check-equal? (fkw1) 13)
+(check-equal? (fkw1 (list 10 20)) 40)
+(check-exn exn:misc:match? (λ () (fkw1 10)))
+
+(~define (fkw2 #:A ($list x y)) (+ x y 10))
+(check-equal? (fkw2 #:A (list 1 2)) 13)
+
+(~define (fkw3 #:B [($list x y) (list 1 2)]) (+ x y 10))
+(check-equal? (fkw3 #:B (list 10 20)) 40)
+(check-exn exn:misc:match? (λ () (fkw3 #:B 10)))
+
+
+
+
 ;; test non-list pats
 (~define (gg ($ xxx)) (add1 xxx))
 (check-equal? (gg 10001) 10002)
