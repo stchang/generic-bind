@@ -417,7 +417,7 @@
   (syntax-parse stx
     ;; this clause allows naming of the accums so the body can reference them
     ;; -- used by for/fold and for/lists
-    [(_ final combiner break? ([accum base] ...)
+    [(_ final combiner (~optional (~seq #:break? break?)) ([accum base] ...)
         (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
      #`(let ([accum base] ...)
@@ -450,21 +450,26 @@
                     ;; must shadow accum in new loop, in case body references it
                     (let new-loop ([accum accum] ...)
                       ;; must check break? first, bc more? pulls an item
-                      (if (and (not (break? accum ...)) (more?) ...)
+                      (if (and #,@(if (attribute break?) 
+                                      #'((not (break? accum ...)))
+                                      #'())
+                               (more?) ...)
                           (~let ([b (next)] ...) conditional-body)
                           (values accum ...))))])))
      #'(call-with-values (λ () expanded-for) final)]
     ;; this clause has unnamed accums, name them and then call the first clause
-    [(_ final combiner break? (base ...) 
+    [(_ final combiner (~optional (~seq #:break? break?)) (base ...) 
         (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with (accum ...) (generate-temporaries #'(base ...))
-     (template (~for/common final combiner break? ([accum base] ...) 
-                            ((?@ . c) ...) (?@ . bb) ... body ...))]))
+     #`(~for/common final combiner 
+                    #,@(if (attribute break?) #'(#:break? break?) #'())
+                    ([accum base] ...) 
+                    #,@(template (((?@ . c) ...) (?@ . bb) ... body ...)))]))
 
 ;; inserts #:when #t between each (non-#:when/unless) clause
 (define-syntax (~for*/common stx)
   (syntax-parse stx
-    [(_ fin comb b? (base ...) 
+    [(_ fin comb (~optional (~seq #:break? b?)) (base ...) 
         ((~seq sb:seq-binding ... wb:when-or-break ...) ...) body ...)
      #:with ((new-sb ...) ...)
      ;; append accounts for list added by splicing-syntax-class
@@ -475,22 +480,29 @@
      ;; wb is also a list (due to splicing-stx-class)
      #:with (new-clause ...) 
        (template ((?@ . (new-sb ... (?@ . ((?@ . wb) ...)))) ...))
-     #'(~for/common fin comb b? (base ...) (new-clause ...) body ...)]))
+     #`(~for/common fin comb 
+                    #,@(if (attribute b?) #'(#:break? b?) #'())
+                    (base ...) (new-clause ...) body ...)]))
 
 (define-syntax (mk~for/ stx)
   (syntax-parse stx 
     [(_ name combiner (base ...)
         (~optional (~seq #:final fin) #:defaults ([fin #'id-fn]))
-        (~optional (~seq #:break? b?) #:defaults ([b? #'(λ _ #f)])))
+        (~optional (~seq #:break? b?)))
      #:with new-name (format-id #'name "~~for/~a" #'name)
      #:with new-name* (format-id #'name "~~for*/~a" #'name)
-     #'(begin (define-syntax-rule (new-name x (... ...)) 
-                (~for/common fin combiner b? (base ...) x (... ...)))
-              (define-syntax-rule (new-name* x (... ...)) 
-                (~for*/common fin combiner b? (base ...) x (... ...))))]))
+     #`(begin 
+         (define-syntax-rule (new-name x (... ...)) 
+           (~for/common fin combiner 
+                        #,@(if (attribute b?) #'(#:break? b?) #'())
+                        (base ...) x (... ...)))
+         (define-syntax-rule (new-name* x (... ...)) 
+           (~for*/common fin combiner 
+                         #,@(if (attribute b?) #'(#:break? b?) #'())
+                         (base ...) x (... ...))))]))
 
-(define-syntax-rule (~for x ...) (~for/common void void (λ _ #f) ((void)) x ...))
-(define-syntax-rule (~for* x ...) (~for*/common void void (λ _ #f) ((void)) x ...))
+(define-syntax-rule (~for x ...) (~for/common void void ((void)) x ...))
+(define-syntax-rule (~for* x ...) (~for*/common void void ((void)) x ...))
 
 ;; ~for/list ~for*/list and ~for/lists probably need a "right folding" for/common
 ;;   but for now, just reverse the output
@@ -513,7 +525,7 @@
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for/common
-                values (λ (accum ... res ...) (values res ...)) (λ _ #f)
+                values (λ (accum ... res ...) (values res ...))
                 ([accum init] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 (define-syntax (~for*/fold stx)
   (syntax-parse stx
@@ -521,7 +533,7 @@
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for*/common 
-                values (λ (accum ... res ...) (values res ...)) (λ _ #f)
+                values (λ (accum ... res ...) (values res ...))
                 ([accum init] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 
 (define-syntax (~for/lists stx)
@@ -531,7 +543,7 @@
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for/common 
                 (λ (accum ...) (values (reverse accum) ...))
-                (λ (accum ... res ...) (values (cons res accum) ...)) (λ _ #f)
+                (λ (accum ... res ...) (values (cons res accum) ...))
                 ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 (define-syntax (~for*/lists stx)
   (syntax-parse stx
@@ -540,7 +552,7 @@
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for*/common 
                 (λ (accum ...) (values (reverse accum) ...))
-                (λ (accum ... res ...) (values (cons res accum) ...)) (λ _ #f)
+                (λ (accum ... res ...) (values (cons res accum) ...))
                 ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 
 ;; ~for/vector is an imperative mess
@@ -566,6 +578,7 @@
                    vec))
           ;; need the unless to handle when nested loops return
           (λ (acc y) (vector-set! vec i y) (set! i (add1 i))) ; combiner
+          #:break?
           (λ _ (cond ; break?
                  [(>= i vec-len)
                   (cond 
@@ -600,6 +613,7 @@
                    vec))
           ;; need the unless to handle when nested loops return
           (λ (acc y) (vector-set! vec i y) (set! i (add1 i))) ; combiner
+          #:break?
           (λ _ (cond ; break?
                  [(>= i vec-len)
                   (cond 
