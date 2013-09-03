@@ -439,7 +439,10 @@
                   (if (null? ws)
                       #'do-it
                       (syntax-parse (car ws)
-                        [((#:when guard)) #`(if guard #,(whenloop (cdr ws)) skip-it)]
+                        [((#:when guard)) 
+                         (if (eq? (syntax-e #'guard) #t)
+                             (whenloop (cdr ws))
+                             #`(if guard #,(whenloop (cdr ws)) skip-it))]
                         [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
                         [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
                         [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
