@@ -1,3 +1,10 @@
+******** 2013-09-02 ********
+- none of my optimizations in ~for/common seems to have sped things up:
+  - eliminate checks for #:when #t
+  - dont call final unless needed (ie dont just call an id default)
+  - dont call break? unless specified (ie no (lambda _ #f) default)
+  - remove spurious call-with-values when there is only 1 accum
+
 ******** 2013-08-25 ********
 common errors and their causes:
 
