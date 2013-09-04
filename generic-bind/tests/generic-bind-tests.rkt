@@ -396,3 +396,21 @@
  (for*/list ([(lst1 lst2) (in-hash (hash (list 1 2) (list 3 4) (list 5 6) (list 7 8)))]
              [c (car lst1)])
    (list (car lst1) (cadr lst1) (car lst2) (cadr lst2) c)))
+
+;; define-match-bind and ~struct tests ----------------------------------------
+(struct B (x y z))
+(define-match-bind (B x y z))
+
+(~define (bf ($B x y z)) (+ x y z))
+(check-equal? (bf (B 20 40 60)) 120)
+
+(~struct C (a b c [d #:mutable]))
+(~define (cf ($C e f g h)) (+ e f g h))
+(define c (C 9 8 7 6))
+(set-C-d! c 20)
+(check-true (C? c))
+(check-equal? (C-a c) 9)
+(check-equal? (C-b c) 8)
+(check-equal? (C-c c) 7)
+(check-equal? (C-d c) 20)
+(check-equal? (cf c) 44)

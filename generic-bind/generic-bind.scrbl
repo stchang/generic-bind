@@ -31,7 +31,7 @@ Generic binding instances are further separated into two categories:
 
 The second category is a subset of the first and is needed in order to handle Racket's multiple return @racket[values]. Since Racket functions cannot receive @racket[values], we must know what we are binding at the time of the binding. For example, this means that @racket[~let] may support @racket[values] binding, but @racket[~define] or @racket[~lambda] may not. Thus, the second category essentially the first, but without @racket[values]-bindings.
 
-A few generic binding instances are currently supported. Currently, defining new generic binding instances is possible but not well supported. To learn how to do so anyways, see @secref{new-instances}.
+A few generic binding instances are currently supported. Defining new generic bindings is currently limited to new @racket[match]-specific binding instances. See @secref{new-instances} for more information.
 
 @defform[($ match-pattern)]{
   The @racket[match] binding instance. The required pattern is a @racket[match] pattern. May be used in any context.
@@ -568,4 +568,37 @@ All the forms in this section are the same as their Racket counterparts (see @ra
 @; Implementing New Generic Binding Instances ---------------------------------
 @section[#:tag "new-instances"]{Implementing New Generic Binding Instances}
 
-todo
+Only defining @racket[match]-specific new binding instances are currently possible.
+
+@defform[(define-match-bind (name x ...))]{Defines a new binding instance @racket[$name] that binds using the match pattern @racket[(name x ...)].
+
+@interaction[#:eval the-eval
+(struct B (x y z))
+(define-match-bind (B x y z))
+
+(~define (bf ($B x y z)) (+ x y z))
+(bf (B 20 40 60)); 120)
+]}
+
+@defform[(~struct ...)]{Exactly like @racket[struct] except a new generic binding instance is also defined. Equivalent to using @racket[struct] and @racket[define-match-bind].
+
+
+@interaction[#:eval the-eval
+(~struct C (a b c [d #:mutable]))
+]
+Behaves like a @racket[struct]-defined struct:
+@interaction[#:eval the-eval
+(define c (C 9 8 7 6))
+(C? c)
+(C-a c); 9)
+(C-b c); 8)
+(C-c c); 7)
+(C-d c); 6)
+(set-C-d! c 20)
+(C-d c); 20)
+]
+Generic binding instance:
+@interaction[#:eval the-eval
+(~define (cf ($C e f g h)) (+ e f g h))
+(cf c); 44)
+]}

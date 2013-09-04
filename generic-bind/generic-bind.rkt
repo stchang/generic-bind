@@ -30,7 +30,8 @@
          ~for/hash ~for/hasheq ~for/hasheqv
          ~for* ~for*/list ~for*/fold ~for*/vector ~for*/lists 
          ~for*/first ~for*/last ~for*/and ~for*/or ~for*/sum ~for*/product  
-         ~for*/hash ~for*/hasheq ~for*/hasheqv)
+         ~for*/hash ~for*/hasheq ~for*/hasheqv
+         define-match-bind ~struct)
 
 ;; (define-generic-stx bind 
 ;;   (definer letter ids let-only nested-definers nested-idss))
@@ -168,6 +169,40 @@
           [nested-definers ,#'()]
           [nested-idss ,null])
         #'(void))]))
+
+(define-syntax (define-match-bind stx)
+  (syntax-parse stx
+    [(_ (name x ...))
+     #:with $name (format-id #'name "$~a" #'name)
+     #:with match-$name-define (format-id #'here "match-~a-define" #'name)
+     #:with match-$name-let (format-id #'here "match-~a-let" #'name)
+     #'(begin
+         (define-syntax-rule (match-$name-define (x ...) e) (match-define (name x ...) e))
+         (define-syntax-rule (match-$name-let ([(x ...) e] (... ...)) body (... ...)) 
+           (match-let ([(name x ...) e] (... ...)) body (... ...)))
+         (define-syntax ($name stx)
+           (syntax-parse stx 
+             [(_ x ...) (add-syntax-properties
+                         `([definer ,#'match-$name-define]
+                           [letter ,#'match-$name-let]
+                           [ids ,(syntax->datum #'(x ...))]
+                           [let-only #f]
+                           [nested-definers ,#'()]
+                           [nested-idss ,null])
+                         #'(void))])))]))
+
+
+(begin-for-syntax ;; ~struct syntax classes
+  (define-syntax-class struct-field
+    (pattern field:id #:attr name #'field)
+    (pattern [field:id opt ...] #:attr name #'field))
+  ) ; end begin-for-syntax
+(define-syntax (~struct stx)
+  (syntax-parse stx 
+    [(_ id super ... (field:struct-field ...) opt ...)
+     #'(begin
+         (struct id super ... (field ...) opt ...)
+         (define-match-bind (id field.name ...)))]))
   
 
 ;; values generic bind instance
