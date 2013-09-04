@@ -14,7 +14,7 @@
 ;; [o] 2013-08-21: syntax object for ~m and ~vs is void? 
 ;;                 can I put anything useful here?
 ;; [o] 2013-08-21: create generic form for syntax to 
-;;                 automatically define accessors?
+;;                 automatically define struct accessors?
 ;; [o] 2013-08-21: fix error msgs
 ;;                 - named ~let dup id references define
 
@@ -412,7 +412,6 @@
 
 (define id-fn identity)
 
-;; base(s) must be a list due to possible multiple vals
 (define-syntax (~for/common stx) ; essentially a foldl (ie uses an accum(s))
   (syntax-parse stx
     ;; this clause allows naming of the accums so the body can reference them
@@ -582,73 +581,66 @@
     [(_ (~optional (~seq (~seq #:length len) 
                          (~optional (~seq #:fill fill) #:defaults ([fill #'0]))))
         x ...)
-     #`(let
-           #,(if (attribute len)
-                  #'([vec (make-vector len fill)]
-                     [vec-len len]
-                     [vec-expandable? #f])
-                  #'([vec (make-vector 16)]
-                     [vec-len 16]
-                     [vec-expandable? #t]))
-         (define i 0)
-         (~for/common 
-          #:final
-          (λ _ (if vec-expandable? ; final
-                   (let ([new-vec (make-vector i)])
-                     (vector-copy! new-vec 0 vec 0 i)
-                     new-vec)
-                   vec))
-          ;; need the unless to handle when nested loops return
-          (λ (acc y) (vector-set! vec i y) (set! i (add1 i))) ; combiner
-          #:break?
-          (λ _ (cond ; break?
-                 [(>= i vec-len)
-                  (cond 
-                    [(not vec-expandable?) #t]
-                    [else (define new-vec (make-vector (* vec-len 2)))
-                          (vector-copy! new-vec 0 vec 0 vec-len)
-                          (set! vec-len (* 2 vec-len))
-                          (set! vec new-vec)
-                          #f])]
-                 [else #f]))
-          ((void)) ; base ...
-          x ...))]))
+     (if (attribute len)
+         ;; if #:length is specified, then we need a break? because there may
+         ;; be more iterations than #:length
+         #'(let ([vec (make-vector len fill)]
+                 [vec-len len])
+             (define i 0)
+             (~for/common 
+              #:final (λ _ vec)
+              (λ (acc y) (vector-set! vec i y) (set! i (add1 i))) ; combiner
+              #:break? (λ _ (>= i vec-len))
+              ((void)) ; base ...
+              x ...))
+         ;; repeatedly checking break? is slow so if no #:length is given,
+         ;; first build list and then copy into a result vector
+         #'(~for/common
+            #:final 
+            (λ (lst) 
+              (let* ([vec-len (length lst)]
+                     [vec (make-vector vec-len)])
+                (let loop ([n vec-len] [lst lst])
+                  (if (zero? n) vec
+                      (let ([n-1 (sub1 n)])
+                        (vector-set! vec n-1 (car lst))
+                        (loop n-1 (cdr lst)))))))
+            (λ (acc y) (cons y acc))
+            (null)
+            x ...))]))
 (define-syntax (~for*/vector stx) 
   (syntax-parse stx
     [(_ (~optional (~seq (~seq #:length len) 
                          (~optional (~seq #:fill fill) #:defaults ([fill #'0]))))
         x ...)
-     #`(let
-           #,(if (attribute len)
-                  #'([vec (make-vector len fill)]
-                     [vec-len len]
-                     [vec-expandable? #f])
-                  #'([vec (make-vector 16)]
-                     [vec-len 16]
-                     [vec-expandable? #t]))
-         (define i 0)
-         (~for*/common 
-          #:final
-          (λ _ (if vec-expandable? ; final
-                   (let ([new-vec (make-vector i)])
-                     (vector-copy! new-vec 0 vec 0 i)
-                     new-vec)
-                   vec))
-          ;; need the unless to handle when nested loops return
-          (λ (acc y) (vector-set! vec i y) (set! i (add1 i))) ; combiner
-          #:break?
-          (λ _ (cond ; break?
-                 [(>= i vec-len)
-                  (cond 
-                    [(not vec-expandable?) #t]
-                    [else (define new-vec (make-vector (* vec-len 2)))
-                          (vector-copy! new-vec 0 vec 0 vec-len)
-                          (set! vec-len (* 2 vec-len))
-                          (set! vec new-vec)
-                          #f])]
-                 [else #f]))
-          ((void)) ; base ...
-          x ...))]))
+     (if (attribute len)
+         ;; if #:length is specified, then we need a break? because there may
+         ;; be more iterations than #:length
+         #'(let ([vec (make-vector len fill)]
+                 [vec-len len])
+             (define i 0)
+             (~for*/common 
+              #:final (λ _ vec)
+              (λ (acc y) (vector-set! vec i y) (set! i (add1 i))) ; combiner
+              #:break? (λ _ (>= i vec-len))
+              ((void)) ; base ...
+              x ...))
+         ;; repeatedly checking break? is slow so if no #:length is given,
+         ;; first build list and then copy into a result vector
+         #'(~for*/common
+            #:final 
+            (λ (lst) 
+              (let* ([vec-len (length lst)]
+                     [vec (make-vector vec-len)])
+                (let loop ([n vec-len] [lst lst])
+                  (if (zero? n) vec
+                      (let ([n-1 (sub1 n)])
+                        (vector-set! vec n-1 (car lst))
+                        (loop n-1 (cdr lst)))))))
+            (λ (acc y) (cons y acc))
+            (null)
+            x ...))]))
+
 
 
 ;; this is a right-folding ~for/common
