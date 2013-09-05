@@ -1,4 +1,19 @@
 ******** 2013-09-04 ********
+- fast-for branch
+; i7-2600k, 12gb, racket w no xrepl, after gcing
+
+> (let ([n 200]) (time (~for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+cpu time: 2449 real time: 2454 gc time: 2169
+> (let ([n 200]) (time (for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+cpu time: 2896 real time: 2906 gc time: 2676
+
+> (let ([n 200]) (time (~for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (values (list x) (list y) (list z)))) (void))
+cpu time: 9324 real time: 9351 gc time: 7596
+>  (let ([n 200]) (time (for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (values (list x) (list y) (list z)))) (void))
+cpu time: 5852 real time: 5873 gc time: 5236
+
+
+******** 2013-09-04 ********
 - with unsafe ops
 ; i7-2600k, 12gb, racket w no xrepl, after gcing
 
