@@ -5,6 +5,7 @@
 (require (for-syntax syntax/parse/experimental/template))
 (require (for-syntax "stx-utils.rkt"))
 (require racket/unsafe/ops)
+(require racket/private/for)
 
 ;; TODO:
 ;; [x] 2013-08-26: ~let doesn't support ~vs DONE: 2013-08-26
@@ -88,6 +89,13 @@
              #:fail-when (bind-let-only? #'expanded-b)
                          (format "can't use ~a pattern in non-let binding ctxt"
                                  (syntax->datum #'b))))
+  (define-syntax-class bind/let-only
+    #:description "a generic bind instance for let contexts only"
+    #:auto-nested-attributes
+    (pattern :bind 
+             #:fail-when (not (bind-let-only? #'expanded-b))
+             (format "can't use ~a pattern in let-only binding ctxt"
+                     (syntax->datum #'b))))
   (define-syntax-class id-or-bind/non-let
     #:auto-nested-attributes
     (pattern :bind/non-let #:attr name (generate-temporary))
@@ -436,7 +444,10 @@
   (define-splicing-syntax-class for-clause 
     (pattern :seq-binding) (pattern :when-or-break))
   (define-syntax-class for-binder
-    (pattern :bind) (pattern x:id) (pattern (x:id ...)))
+    (pattern :bind/let-only #:with xs (generate-temporaries (attribute ids)))
+    (pattern :bind #:with xs (list (generate-temporary)))
+    (pattern x:id #:attr xs #'(x))
+    (pattern (x:id ...) #:attr xs #'(x ...)))
   (define-splicing-syntax-class when-or-break 
     (pattern :when-clause) (pattern :break-clause))
   (define-splicing-syntax-class when-clause
@@ -459,46 +470,66 @@
         (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with expanded-for
      (let ([one-accum? (= 1 (length (syntax->list #'(accum ...))))])
-     #`(let ([accum base] ...)
-         #,(let stxloop ([cs #'(c ... bb ...)])
-             (syntax-parse cs
-               [() #`(call-with-values (λ () body ...)
-                                       (λ res (apply combiner accum ... res)))]
-               [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
-                #:with (more? ...) (generate-temporaries #'(b ...))
-                #:with (next ...) (generate-temporaries #'(b ...))
-                #:with new-loop (generate-temporary)
-                #:with skip-it #'(new-loop accum ...)
-                #:with do-it 
-                (if one-accum?
-                    #`(new-loop #,(stxloop #'(rst ...)))
-                    #`(call-with-values (λ () #,(stxloop #'(rst ...))) new-loop))
-                #:with its-done 
-                (if one-accum? (car (syntax->list #'(accum ...))) #'(values accum ...))
-                #:with one-more-time (stxloop #'(rst ...))
-                #:with conditional-body
-                (let whenloop ([ws (syntax->list #'((w) ...))])
-                  (if (null? ws)
-                      #'do-it
-                      (syntax-parse (car ws)
-                        [((#:when guard)) 
-                         (if (eq? (syntax-e #'guard) #t)
-                             (whenloop (cdr ws))
-                             #`(if guard #,(whenloop (cdr ws)) skip-it))]
-                        [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
-                        [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
-                        [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
-                #`(let-values ([(more? next) (sequence-generate seq)] ...)
-                    ;; must shadow accum in new loop, in case body references it
-                    (let new-loop ([accum accum] ...)
-                      ;; must check break? first, bc more? pulls an item
-                      (if (and #,@(if (attribute break?) 
-                                      #'((not (break? accum ...)))
-                                      #'())
-                               (more?) ...)
-                          (~let ([b (next)] ...) conditional-body)
-                          #,@(if one-accum? #'(accum ...) 
-                                            #'((values accum ...))))))]))))
+       #`(let ([accum base] ...)
+           #,(let stxloop ([cs #'(c ... bb ...)])
+               (syntax-parse cs
+                 [() #`(call-with-values (λ () body ...)
+                                         (λ res (apply combiner accum ... res)))]
+                 [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
+                  (with-syntax* 
+                   ([one-more-time (stxloop #'(rst ...))]
+                    [((ys ...) ...) #'(b.xs ...)]
+                    [(([outer-binding ...]
+                       outer-check
+                       [loop-binding ...]
+                       pos-guard
+                       ;[inner-binding ...]
+                       [[xs next] ...]
+                       pre-guard
+                       post-guard
+                       [loop-arg ...]) ...)
+                     (map (λ (x) (expand-clause x x)) (syntax->list #'([b.xs seq] ...)))]
+                    [new-loop (generate-temporary)]
+                    [its-done (if one-accum? 
+                                  (car (syntax->list #'(accum ...)))
+                                  #'(values accum ...))]
+                    [skip-it #`(if (and post-guard ...) 
+                                   (new-loop accum ... loop-arg ... ...)
+                                   its-done)]
+                    [do-it 
+                     (if one-accum?
+                         #`(if (and post-guard ...) 
+                               (new-loop one-more-time loop-arg ... ...)
+                               one-more-time)
+                         #`(if (and post-guard ...)
+                               (call-with-values 
+                                (λ () one-more-time) 
+                                (λ res (apply new-loop 
+                                              (append res (list loop-arg ... ...)))))
+                               one-more-time))]
+                    [conditional-body
+                     (let whenloop ([ws (syntax->list #'((w) ...))])
+                       (if (null? ws)
+                           #'do-it
+                           (syntax-parse (car ws)
+                             [((#:when guard)) 
+                              (if (eq? (syntax-e #'guard) #t)
+                                  (whenloop (cdr ws))
+                                  #`(if guard #,(whenloop (cdr ws)) skip-it))]
+                             [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
+                             [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
+                             [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))])
+                   #`(let-values #;([(more? next) (sequence-generate seq)] ...) (outer-binding ... ...)
+                       ;; must shadow accum in new loop, in case body references it
+                       (let new-loop ([accum accum] ... loop-binding ... ...)
+                         ;; must check break? first, bc more? pulls an item
+                         (if (and #,@(if (attribute break?) #'((not (break? accum ...))) #'())
+                                  pos-guard ...)
+                             (let-values ([xs next] ... ...)
+                               (if (and pre-guard ...)
+                                   (~let ([b (values ys ...)] ...) conditional-body)
+                                   its-done))
+                             its-done))))]))))
      (if (attribute final)
          (if (= 1 (length (syntax->list #'(accum ...)))) ; one accum
              #'(final expanded-for)
@@ -599,7 +630,7 @@
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for/common 
                 #:final (λ (accum ...) (values (reverse accum) ...))
-                (λ (accum ... res ...) (values (cons res accum) ...))
+                (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
                 ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 (define-syntax (~for*/lists stx)
   (syntax-parse stx
@@ -608,7 +639,7 @@
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for*/common 
                 #:final (λ (accum ...) (values (reverse accum) ...))
-                (λ (accum ... res ...) (values (cons res accum) ...))
+                (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
                 ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
 
 ;; ~for/vector is an imperative mess

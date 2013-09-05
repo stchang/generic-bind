@@ -127,7 +127,7 @@
                          (set! count 0)
                          (for/and ([(e idx) g]) (set! count (add1 count)) (equal? idx (sub1 count)))))
          (void))
-;       ;; Run multi-value tests:
+       ;; Run multi-value tests:
        (test-multi-sequence [seq] gen)
        )]
     [(_ seqs gen)

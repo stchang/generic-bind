@@ -78,8 +78,8 @@
 (test-sequence [(h f d)] (in-vector #(a b c d e f g h) 7 2 -2))
 (test-sequence [(c b a)] (in-vector #(a b c) 2 -1 -1))
 ;;; Test indices out of bounds
-;(err/rt-test (for/list ([x (in-vector #(a b c d) 0 6 2)]) x) exn:fail:contract?)
-;(err/rt-test (for/list ([x (in-vector #(a b c d) 6 0 -2)]) x) exn:fail:contract?)
+;;(err/rt-test (for/list ([x (in-vector #(a b c d) 0 6 2)]) x) exn:fail:contract?)
+;;(err/rt-test (for/list ([x (in-vector #(a b c d) 6 0 -2)]) x) exn:fail:contract?)
 (check-exn exn:fail:contract? (λ () (for/list ([x (in-vector #(a b c d) 0 6 2)]) x)))
 (check-exn exn:fail:contract? (λ () (for/list ([x (in-vector #(a b c d) 6 0 -2)]) x)))
 (test-sequence [(#\a #\b #\c)] "abc")
@@ -123,12 +123,12 @@
 (test-sequence [(0 1 2 3 #\a #\b #\c) (10 11 12 13 #\A #\B #\C)]
                 (in-sequences (in-parallel (in-range 0 4) (in-range 10 14))
                               (in-parallel "abc" "ABC")))
-;; Check empty sequences:
+; Check empty sequences:
 (test '() 'empty-seq (for/list ([v (in-sequences)]) v))
 (test '() 'empty-seq (for/list ([v (in-sequences '())]) v))
 (test '() 'empty-seq (for/list ([v (in-sequences '() '())]) v))
 
-;;; use in-parallel to get a finite number of items
+;; use in-parallel to get a finite number of items
 (test-sequence [(0 1 2 3 0 1 2 3) (0 1 2 3 4 5 6 7)]
                 (in-parallel (in-cycle (in-range 0 4)) (in-range 0 8)))
 (test-sequence [(0 1 2 3 4 5 6 7) (0 1 2 0 1 2 0 1)]
