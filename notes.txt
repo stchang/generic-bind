@@ -1,3 +1,29 @@
+******** 2013-09-04 ********
+- with unsafe ops
+; i7-2600k, 12gb, racket w no xrepl, after gcing
+
+> (let ([n 200]) (time (~for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+cpu time: 4912 real time: 4925 gc time: 3532
+> (let ([n 200]) (time (for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+cpu time: 2984 real time: 2992 gc time: 2756
+
+> (let ([n 200]) (time (for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (values (list x) (list y) (list z)))) (void))
+cpu time: 5900 real time: 5920 gc time: 5304
+> (let ([n 200]) (time (~for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (values (list x) (list y) (list z)))) (void))
+cpu time: 9752 real time: 9781 gc time: 7516
+
+
+******** 2013-09-03 ********
+- ~for/vector builds list first before copying to vector
+- now < 2x slower
+
+; i7-i2600k, 12gb, in racket (no xrepl)
+> (let ([n 200]) (time (~for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+
+cpu time: 5789 real time: 5804 gc time: 4385
+> (let ([n 200]) (time (for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
+cpu time: 3632 real time: 3645 gc time: 3404
+
 ******** 2013-09-02 ********
 - added some optimizations in ~for/common seems to speed things up:
   - eliminate checks for #:when #t
@@ -5,7 +31,7 @@
   - dont call break? unless specified (ie no (lambda _ #f) default)
   - remove spurious call-with-values when there is only 1 accum
 
-previous timings (in drracket):
+*** previous timings (in drracket):
 - ~for*/lists is ~3x slower than for*/lists
 - ~for*/vector is ~3x slower than for*/vector
 
@@ -22,7 +48,7 @@ previous timings (in drracket):
 ;> (let ([n 200]) (time (~for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
 ;cpu time: 16145 real time: 16306 gc time: 12769
 
-new timings (from racket xrepl):
+*** new timings (from racket xrepl):
 - ~for*/lists went from ~3x slower to ~1.5 slower
 - ~for*/vector went from > ~3x slower to < ~3x slower
 

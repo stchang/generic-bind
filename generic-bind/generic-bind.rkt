@@ -4,6 +4,7 @@
                      racket/list)) ; append-map
 (require (for-syntax syntax/parse/experimental/template))
 (require (for-syntax "stx-utils.rkt"))
+(require racket/unsafe/ops)
 
 ;; TODO:
 ;; [x] 2013-08-26: ~let doesn't support ~vs DONE: 2013-08-26
@@ -562,7 +563,7 @@
 ;; ~for/list ~for*/list and ~for/lists probably need a "right folding" for/common
 ;;   but for now, just reverse the output
 ;; - have to reverse args in cons bc acc is first
-(mk~for/ list (λ (acc y) (cons y acc)) (null) #:final reverse)
+(mk~for/ list (λ (acc y) (unsafe-cons-list y acc)) (null) #:final reverse)
 ;; break as soon as we find something
 (mk~for/ first (λ (acc y) y) (#f) #:break? id-fn)
 (mk~for/ last (λ (acc y) y) (#f))
@@ -624,7 +625,7 @@
              (define i 0)
              (~for/common 
               #:final (λ _ vec)
-              (λ (acc y) (vector-set! vec i y) (set! i (add1 i))) ; combiner
+              (λ (acc y) (unsafe-vector-set! vec i y) (set! i (add1 i))) ; combiner
               #:break? (λ _ (>= i vec-len))
               ((void)) ; base ...
               x ...))
@@ -638,9 +639,9 @@
                 (let loop ([n vec-len] [lst lst])
                   (if (zero? n) vec
                       (let ([n-1 (sub1 n)])
-                        (vector-set! vec n-1 (car lst))
-                        (loop n-1 (cdr lst)))))))
-            (λ (acc y) (cons y acc))
+                        (unsafe-vector-set! vec n-1 (unsafe-car lst))
+                        (loop n-1 (unsafe-cdr lst)))))))
+            (λ (acc y) (unsafe-cons-list y acc))
             (null)
             x ...))]))
 (define-syntax (~for*/vector stx) 
@@ -656,7 +657,7 @@
              (define i 0)
              (~for*/common 
               #:final (λ _ vec)
-              (λ (acc y) (vector-set! vec i y) (set! i (add1 i))) ; combiner
+              (λ (acc y) (unsafe-vector-set! vec i y) (set! i (add1 i))) ; combiner
               #:break? (λ _ (>= i vec-len))
               ((void)) ; base ...
               x ...))
@@ -670,9 +671,9 @@
                 (let loop ([n vec-len] [lst lst])
                   (if (zero? n) vec
                       (let ([n-1 (sub1 n)])
-                        (vector-set! vec n-1 (car lst))
-                        (loop n-1 (cdr lst)))))))
-            (λ (acc y) (cons y acc))
+                        (unsafe-vector-set! vec n-1 (unsafe-car lst))
+                        (loop n-1 (unsafe-cdr lst)))))))
+            (λ (acc y) (unsafe-cons-list y acc))
             (null)
             x ...))]))
 
