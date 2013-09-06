@@ -466,85 +466,82 @@
     [(_ (~optional (~seq #:final final))
         combiner
         (~optional (~seq #:break? break?))
+        (~optional (~seq #:result (res:id ...)))
         ([accum base] ...)
         (c:for-clause ...) bb:break-clause ... body:expr ...)
+     #:with (body-res ...) (generate-temporaries #'(accum ...))
      #:with expanded-for
-     (let ([one-accum? (= 1 (length (syntax->list #'(accum ...))))])
-       #`(let ([accum base] ...)
-           #,(let stxloop ([cs #'(c ... bb ...)])
-               (syntax-parse cs
-                 [() #`(call-with-values (λ () body ...)
-                                         (λ res (apply combiner accum ... res)))]
-                 [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
-                  (with-syntax* 
-                   ([one-more-time (stxloop #'(rst ...))]
-                    [((ys ...) ...) #'(b.xs ...)]
-                    [(([outer-binding ...]
-                       outer-check
-                       [loop-binding ...]
-                       pos-guard
-                       ;[inner-binding ...]
-                       [[xs next] ...]
-                       pre-guard
-                       post-guard
-                       [loop-arg ...]) ...)
-                     (map (λ (x) (expand-clause x x)) (syntax->list #'([b.xs seq] ...)))]
-                    [new-loop (generate-temporary)]
-                    [its-done (if one-accum? 
-                                  (car (syntax->list #'(accum ...)))
-                                  #'(values accum ...))]
-                    [skip-it #`(if (and post-guard ...) 
-                                   (new-loop accum ... loop-arg ... ...)
-                                   its-done)]
-                    [do-it 
-                     (if one-accum?
-                         #`(if (and post-guard ...) 
-                               (new-loop one-more-time loop-arg ... ...)
-                               one-more-time)
-                         #`(if (and post-guard ...)
-                               (call-with-values 
-                                (λ () one-more-time) 
-                                (λ res (apply new-loop 
-                                              (append res (list loop-arg ... ...)))))
-                               one-more-time))]
-                    [conditional-body
-                     (let whenloop ([ws (syntax->list #'((w) ...))])
-                       (if (null? ws)
-                           #'do-it
-                           (syntax-parse (car ws)
-                             [((#:when guard)) 
-                              (if (eq? (syntax-e #'guard) #t)
-                                  (whenloop (cdr ws))
-                                  #`(if guard #,(whenloop (cdr ws)) skip-it))]
-                             [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
-                             [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
-                             [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))])
-                   #`(let-values #;([(more? next) (sequence-generate seq)] ...) (outer-binding ... ...)
-                       ;; must shadow accum in new loop, in case body references it
-                       (let new-loop ([accum accum] ... loop-binding ... ...)
-                         ;; must check break? first, bc more? pulls an item
-                         (if (and #,@(if (attribute break?) #'((not (break? accum ...))) #'())
-                                  pos-guard ...)
-                             (let-values ([xs next] ... ...)
-                               (if (and pre-guard ...)
-                                   (~let ([b (values ys ...)] ...) conditional-body)
-                                   its-done))
-                             its-done))))]))))
+     #`(let ([accum base] ...)
+       #,(let stxloop ([cs #'(c ... bb ...)])
+           (syntax-parse cs
+             [() #`(let-values ([#,(if (attribute res)
+                                       #'(res ...)
+                                       #'(body-res ...))
+                                 (begin body ...)])
+                     (combiner accum ... 
+                               #,@(if (attribute res) #'(res ...) #'(body-res ...))))]
+             [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
+              (with-syntax* 
+               ([one-more-time (stxloop #'(rst ...))]
+                [((ys ...) ...) #'(b.xs ...)]
+                [(([outer-binding ...]
+                   outer-check
+                   [loop-binding ...]
+                   pos-guard
+                   ;[inner-binding ...]
+                   [[xs next] ...]
+                   pre-guard
+                   post-guard
+                   [loop-arg ...]) ...)
+                 (map (λ (x) (expand-clause x x)) (syntax->list #'([b.xs seq] ...)))]
+                [new-loop (generate-temporary)]
+                [its-done #'(values accum ...)]
+                [skip-it #`(if (and post-guard ...) 
+                               (new-loop accum ... loop-arg ... ...)
+                               its-done)]
+                [do-it 
+                 #`(if (and post-guard ...) 
+                       (let-values ([(accum ...) one-more-time])
+                         (new-loop accum ... loop-arg ... ...))
+                       one-more-time)]
+                [conditional-body
+                 (let whenloop ([ws (syntax->list #'((w) ...))])
+                   (if (null? ws)
+                       #'do-it
+                       (syntax-parse (car ws)
+                         [((#:when guard)) 
+                          (if (eq? (syntax-e #'guard) #t)
+                              (whenloop (cdr ws))
+                              #`(if guard #,(whenloop (cdr ws)) skip-it))]
+                         [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
+                         [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
+                         [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))])
+               #`(let-values (outer-binding ... ...)
+                   ;; must shadow accum in new loop, in case body references it
+                   (let new-loop ([accum accum] ... loop-binding ... ...)
+                     ;; must check break? first, bc more? pulls an item
+                     (if (and #,@(if (attribute break?) #'((not (break? accum ...))) #'())
+                              pos-guard ...)
+                         (let-values ([xs next] ... ...)
+                           (if (and pre-guard ...)
+                               (~let ([b (values ys ...)] ...) conditional-body)
+                               its-done))
+                         its-done))))])))
      (if (attribute final)
-         (if (= 1 (length (syntax->list #'(accum ...)))) ; one accum
-             #'(final expanded-for)
-             #'(call-with-values (λ () expanded-for) final))
+         #'(let-values ([(accum ...) expanded-for]) (final accum ...))
          #'expanded-for)]
     ;; this clause has unnamed accums, name them and then call the first clause
     [(_ (~optional (~seq #:final final))
         combiner
         (~optional (~seq #:break? break?))
+        (~optional (~seq #:result (res:id ...)))
         (base ...) 
         (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with (accum ...) (generate-temporaries #'(base ...))
      #`(~for/common #,@(if (attribute final) #'(#:final final) #'())
                     combiner 
                     #,@(if (attribute break?) #'(#:break? break?) #'())
+                    #,@(if (attribute res) #'(#:result (res ...)) #'())
                     ([accum base] ...) 
                     #,@(template (((?@ . c) ...) (?@ . bb) ... body ...)))]))
 
@@ -554,6 +551,7 @@
     [(_ (~optional (~seq #:final fin))
         comb
         (~optional (~seq #:break? b?))
+        (~optional (~seq #:result (res:id ...)))
         (base ...) 
         ((~seq sb:seq-binding ... wb:when-or-break ...) ...) body ...)
      #:with ((new-sb ...) ...)
@@ -568,12 +566,15 @@
      #`(~for/common #,@(if (attribute fin) #'(#:final fin) #'())
                     comb 
                     #,@(if (attribute b?) #'(#:break? b?) #'())
+                    #,@(if (attribute res) #'(#:result (res ...)) #'())
                     (base ...) (new-clause ...) body ...)]))
 
 (define-syntax (mk~for/ stx)
   (syntax-parse stx 
-    [(_ name combiner (base ...) (~optional (~seq #:final fin))
-                                 (~optional (~seq #:break? b?)))
+    [(_ name combiner (base ...) 
+        (~optional (~seq #:final fin))
+        (~optional (~seq #:break? b?))
+        (~optional (~seq #:result (res:id ...))))
      #:with new-name (format-id #'name "~~for/~a" #'name)
      #:with new-name* (format-id #'name "~~for*/~a" #'name)
      #`(begin 
@@ -581,11 +582,13 @@
            (~for/common #,@(if (attribute fin) #'(#:final fin) #'())
                         combiner 
                         #,@(if (attribute b?) #'(#:break? b?) #'())
+                        #,@(if (attribute res) #'(#:result (res ...)) #'())
                         (base ...) x (... ...)))
          (define-syntax-rule (new-name* x (... ...)) 
            (~for*/common #,@(if (attribute fin) #'(#:final fin) #'()) 
                          combiner 
                          #,@(if (attribute b?) #'(#:break? b?) #'())
+                         #,@(if (attribute res) #'(#:result (res ...)) #'())
                          (base ...) x (... ...))))]))
 
 (define-syntax-rule (~for x ...) (~for/common #:final void void ((void)) x ...))
@@ -602,9 +605,9 @@
 (mk~for/ or (λ (acc y) (or acc y)) (#f) #:break? id-fn)
 (mk~for/ sum + (0))
 (mk~for/ product * (1))
-(mk~for/ hash hash-set ((hash)))
-(mk~for/ hasheq hash-set ((hasheq)))
-(mk~for/ hasheqv hash-set ((hasheqv)))
+(mk~for/ hash hash-set ((hash)) #:result (key val))
+(mk~for/ hasheq hash-set ((hasheq)) #:result (key val))
+(mk~for/ hasheqv hash-set ((hasheqv)) #:result (key val))
 
 (define-syntax (~for/fold stx) ; foldl
   (syntax-parse stx
