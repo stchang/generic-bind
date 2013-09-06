@@ -1,3 +1,52 @@
+******** 2013-09-05 ********
+- ~for in fast-for branch now as fast (or faster) than racket for
+- requires racket/private/for.rkt to provide expand-clause and make-sequence
+
+; times on i7-920, windows 7 64bit, 12gb
+; racket cmd line, no xrepl, 1 gc before timing
+
+> (time (let ([n 300]) (for*/fold ([sum1 0][sum2 0][sum3 0]) ([x (in-range n)][y
+ (in-range n)][z (in-range n)]) (values (+ x sum1) (+ y sum2) (+ z sum3)))))
+cpu time: 5141 real time: 5138 gc time: 156
+> (time (let ([n 300]) (~for*/fold ([sum1 0][sum2 0][sum3 0]) ([x (in-range n)][
+y (in-range n)][z (in-range n)]) (values (+ x sum1) (+ y sum2) (+ z sum3)))))
+cpu time: 5062 real time: 5081 gc time: 140
+
+> (let ([n 150]) (time (for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)]
+[z (in-range n)]) (values (list x) (list y) (list z)))) (void))
+cpu time: 2047 real time: 2048 gc time: 1844
+> (let ([n 150]) (time (~for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)
+][z (in-range n)]) (values (list x) (list y) (list z)))) (void))
+cpu time: 2031 real time: 2038 gc time: 1845
+
+> (let ([n 200]) (time (~for*/vector ([x (in-range n)] [y (in-range n)] [z (in-r
+ange n)]) (list x y z))) (void))
+cpu time: 2250 real time: 2247 gc time: 2000
+> (let ([n 200]) (time (for*/vector ([x (in-range n)] [y (in-range n)] [z (in-ra
+nge n)]) (list x y z))) (void))
+cpu time: 2375 real time: 2378 gc time: 2219
+
+> (time (let ([n 200]) (for*/hash ([x (in-range n)][y (in-range n)][z (in-range
+n)]) (values x (+ z y))) (void)))
+cpu time: 3406 real time: 3408 gc time: 142
+> (time (let ([n 200]) (~for*/hash ([x (in-range n)][y (in-range n)][z (in-range
+ n)]) (values x (+ z y))) (void)))
+cpu time: 3391 real time: 3399 gc time: 187
+
+> (time (let ([n 2000000]) (for/hash ([x (in-range n)][y (in-range n)][z (in-ran
+ge n)]) (values x (+ z y))) (void)))
+cpu time: 3453 real time: 3455 gc time: 532
+> (time (let ([n 2000000]) (~for/hash ([x (in-range n)][y (in-range n)][z (in-ra
+nge n)]) (values x (+ z y))) (void)))
+cpu time: 3453 real time: 3456 gc time: 547
+
+> (time (let ([n 2000000]) (for/hash ([x (in-range n)][y (in-range n)][z (in-ran
+ge n)] #:unless (even? x)) (values x (+ z y))) (void)))
+cpu time: 1640 real time: 1648 gc time: 264
+> (time (let ([n 2000000]) (~for/hash ([x (in-range n)][y (in-range n)][z (in-ra
+nge n)] #:unless (even? x)) (values x (+ z y))) (void)))
+cpu time: 1656 real time: 1648 gc time: 233
+
 ******** 2013-09-04 ********
 - fast-for branch
 ; i7-2600k, 12gb, racket w no xrepl, after gcing

@@ -21,40 +21,6 @@
   [~for*/and for*/and] [~for*/or for*/or] [~for*/sum for*/sum] [~for*/product for*/product]
   [~for*/hash for*/hash] [~for*/hasheq for*/hasheq] [~for*/hasheqv for*/hasheqv]))
 
-;; some informal timing info (for for.rktl and for-util.rkt)
-;; compile time ----------
-;; racket define and for
-;real	0m3.880s
-;user	0m3.748s
-;sys	0m0.116s
-;; with ~define and ~for
-;real	0m6.984s
-;user	0m6.760s
-;sys	0m0.200s
-;; run time ----------
-;; racket define and for
-;real	0m0.457s
-;user	0m0.376s
-;sys	0m0.076s
-;; with ~define and ~for
-;real	0m0.420s
-;user	0m0.392s
-;sys	0m0.024s
-
-;> (let ([n 200]) (time (for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (values (list x) (list y) (list z)))) (void))
-;cpu time: 5632 real time: 5652 gc time: 4912
-;> (let ([n 200]) (time (~for*/lists (l1 l2 l3) ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (values (list x) (list y) (list z)))) (void))
-;cpu time: 14237 real time: 14283 gc time: 11061
-;> (let ([n 200]) (time (for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
-;cpu time: 3100 real time: 3111 gc time: 2852
-;> (let ([n 200]) (time (for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
-;cpu time: 4901 real time: 4919 gc time: 4636
-;> (let ([n 200]) (time (~for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
-;cpu time: 17621 real time: 17684 gc time: 14373
-;> (let ([n 200]) (time (~for*/vector ([x (in-range n)] [y (in-range n)] [z (in-range n)]) (list x y z))) (void))
-;cpu time: 16145 real time: 16306 gc time: 12769
-
-
 (test-sequence [(0 1 2)] 3)
 (test-sequence [(0 1 2)] (in-range 3))
 (test-sequence [(3 4 5)] (in-range 3 6))

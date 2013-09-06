@@ -414,3 +414,11 @@
 (check-equal? (C-c c) 7)
 (check-equal? (C-d c) 20)
 (check-equal? (cf c) 44)
+
+;; this test tripped up my ~for implementation bc there are no "inner bindings"
+(check-equal? (~for/list ([v (in-list (list 1))]) (add1 v)) (list 2))
+;; check that a gen-bind works in this example
+(check-equal? (~for/list ([($list x y) (in-list (list (list 1 2)))]) (list x y))
+              (list (list 1 2)))
+(check-equal? (~for/list ([($ x) (in-list (list 1))]) x)
+              (list 1))
