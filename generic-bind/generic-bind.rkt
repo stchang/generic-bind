@@ -5,7 +5,7 @@
 (require (for-syntax syntax/parse/experimental/template))
 (require (for-syntax "stx-utils.rkt"))
 (require racket/unsafe/ops)
-(require (only-in racket/private/for expand-clause))
+(require (for-syntax (only-in syntax/for-transform expand-for-clause)))
 
 ;; TODO:
 ;; [x] 2013-08-26: ~let doesn't support ~vs DONE: 2013-08-26
@@ -493,7 +493,7 @@
                    pre-guard
                    post-guard
                    [loop-arg ...]) ...)
-                 (map (λ (x) (expand-clause x x)) (syntax->list #'([b.xs seq] ...)))]
+                 (map (λ (x) (expand-for-clause x x)) (syntax->list #'([b.xs seq] ...)))]
                 [new-loop (generate-temporary)]
                 [its-done #'(values accum ...)]
                 [skip-it #`(if (and post-guard ...) 
