@@ -5,7 +5,7 @@
 (require (for-syntax syntax/parse/experimental/template))
 (require (for-syntax "stx-utils.rkt"))
 (require racket/unsafe/ops)
-(require racket/private/for)
+(require (only-in racket/private/for expand-clause))
 
 ;; TODO:
 ;; [x] 2013-08-26: ~let doesn't support ~vs DONE: 2013-08-26
