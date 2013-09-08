@@ -520,7 +520,10 @@
                           #`(if guard 
                                 (begin (set! abort? #t) its-done)
                                 #,(whenloop (cdr ws)))]
-                         [(#:final guard) #`(if guard one-more-time #,(whenloop (cdr ws)))])))])
+                         [(#:final guard) 
+                          #`(if guard 
+                                (begin (set! abort? #t) one-more-time)
+                                #,(whenloop (cdr ws)))])))])
                #`(let-values (outer-binding ... ...)
                    ;; must shadow accum in new loop, in case body references it
                    (let new-loop ([accum accum] ... loop-binding ... ...)
