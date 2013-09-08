@@ -129,6 +129,14 @@ cpu time: 8840 real time: 8867 gc time: 7428
 ******** 2013-08-25 ********
 common errors and their causes:
 
+** Error: inf loop
+** Probable cause:
+   stxloop is not properly matching and keeps trying the same part of the list
+   This is because #:with is not the same as with-syntax:
+   - #:with is part of the match, while with with-syntax, match is already done
+   - so if with-syntax fails, it's an error, if #:with fails, it keeps looking
+     for a different match
+
 ** Error: "expected a generic bind instance in: ( ... )"
 ** Probable cause: 
  Not properly splicing a syntax-splicing-class pattern variable.

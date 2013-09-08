@@ -471,7 +471,7 @@
         (c:for-clause ...) bb:break-clause ... body:expr ...)
      #:with (body-res ...) (generate-temporaries #'(accum ...))
      #:with expanded-for
-     #`(let ([accum base] ...)
+     #`(let ([abort? #f] [accum base] ...)
        #,(let stxloop ([cs #'(c ... bb ...)])
            (syntax-parse cs
              [() #`(let-values ([#,(if (attribute res)
@@ -502,20 +502,25 @@
                 [do-it 
                  #`(if (and post-guard ...) 
                        (let-values ([(accum ...) one-more-time])
-                         (new-loop accum ... loop-arg ... ...))
+                         (if abort?
+                             (values accum ...)
+                             (new-loop accum ... loop-arg ... ...)))
                        one-more-time)]
                 [conditional-body
-                 (let whenloop ([ws (syntax->list #'((w) ...))])
+                 (let whenloop ([ws (syntax->list #'(w ...))])
                    (if (null? ws)
                        #'do-it
                        (syntax-parse (car ws)
-                         [((#:when guard)) 
+                         [(#:when guard) 
                           (if (eq? (syntax-e #'guard) #t)
                               (whenloop (cdr ws))
                               #`(if guard #,(whenloop (cdr ws)) skip-it))]
-                         [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
-                         [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
-                         [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))])
+                         [(#:unless guard) #`(if guard skip-it #,(whenloop (cdr ws)))]
+                         [(#:break guard) 
+                          #`(if guard 
+                                (begin (set! abort? #t) its-done)
+                                #,(whenloop (cdr ws)))]
+                         [(#:final guard) #`(if guard one-more-time #,(whenloop (cdr ws)))])))])
                #`(let-values (outer-binding ... ...)
                    ;; must shadow accum in new loop, in case body references it
                    (let new-loop ([accum accum] ... loop-binding ... ...)
