@@ -447,6 +447,62 @@
 (check-equal? (~for/list ([i 4]  #:final (= i 2) [j 2]) (list i j))
               (for/list ([i 4]  #:final (= i 2) [j 2]) (list i j)))
 
+(check-equal? 
+ (~for*/list ([i 4][j 2] #:final (= i 2) #:break (= i 2)) (list i j))
+ '((0 0) (0 1) (1 0) (1 1)))
 
-;(check-equal? (~for/list ([i 4]) (define j (add1 i)) #:break (= j 3) i) (list 0 1))
-;(check-equal? (~for/list ([i 4]) (define j (add1 i)) #:final (= j 3) i) (list 0 1 2))
+(check-equal? 
+ (~for*/list ([i 4][j 2] #:final (= i 2) #:break (= i 2)) (list i j))
+ (for*/list ([i 4][j 2] #:final (= i 2) #:break (= i 2)) (list i j)))
+
+(check-equal? 
+ (~for*/list ([i 4][j 2] #:break (= i 2) #:final (= i 2)) (list i j))
+ '((0 0) (0 1) (1 0) (1 1)))
+
+(check-equal?
+ (~for*/list ([i 4][j 2] #:break (= i 2) #:final (= i 2)) (list i j))
+ (for*/list ([i 4][j 2] #:break (= i 2) #:final (= i 2)) (list i j)))
+
+(check-equal?
+ (~for*/list ([i 4][j 2] #:final (= i 2) #:unless (= j 0)) (list i j))
+ '((0 1) (1 1)))
+
+(check-equal?
+ (~for*/list ([i 4][j 2] #:final (= i 2) #:unless (= j 0)) (list i j))
+ (for*/list ([i 4][j 2] #:final (= i 2) #:unless (= j 0)) (list i j)))
+
+(check-equal? (~for/list ([i 4]) (define j (add1 i)) #:break (= j 3) i) 
+              (list 0 1))
+(check-equal? (~for/list ([i 4]) (define j (add1 i)) #:break (= j 3) i)
+              (for/list ([i 4]) (define j (add1 i)) #:break (= j 3) i))
+(check-equal? (~for/list ([i 4]) (define j (add1 i)) #:final (= j 3) i) 
+              (list 0 1 2))
+(check-equal? (~for/list ([i 4]) (define j (add1 i)) #:final (= j 3) i) 
+              (for/list ([i 4]) (define j (add1 i)) #:final (= j 3) i))
+(check-equal? (~for*/list ([i 4][j 2]) 
+                          (define k i) #:final (= k 2)
+                          (define m i) #:break (= m 2) 
+                          (list i j))
+              '((0 0) (0 1) (1 0) (1 1)))
+
+(check-equal? (~for*/list ([i 4][j 2]) 
+                          (define k i) #:final (= k 2)
+                          (define m i) #:break (= m 2) 
+                          (list i j))
+              (for*/list ([i 4][j 2]) 
+                (define k i) #:final (= k 2)
+                (define m i) #:break (= m 2) 
+                (list i j)))
+(check-equal? (~for*/list ([i 4][j 2]) 
+                          (define m i) #:break (= m 2) 
+                          (define k i) #:final (= k 2)
+                          (list i j))
+              '((0 0) (0 1) (1 0) (1 1)))
+(check-equal? (~for*/list ([i 4][j 2]) 
+                          (define m i) #:break (= m 2) 
+                          (define k i) #:final (= k 2)
+                          (list i j))
+              (for*/list ([i 4][j 2]) 
+                (define m i) #:break (= m 2) 
+                (define k i) #:final (= k 2)
+                (list i j)))

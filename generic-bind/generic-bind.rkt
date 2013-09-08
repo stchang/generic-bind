@@ -6,6 +6,7 @@
 (require (for-syntax "stx-utils.rkt"))
 (require racket/unsafe/ops)
 (require (for-syntax (only-in syntax/unsafe/for-transform expand-for-clause)))
+(require (for-syntax syntax/for-body))
 
 ;; TODO:
 ;; [x] 2013-08-26: ~let doesn't support ~vs DONE: 2013-08-26
@@ -449,12 +450,16 @@
     (pattern x:id #:attr xs #'(x))
     (pattern (x:id ...) #:attr xs #'(x ...)))
   (define-splicing-syntax-class when-or-break 
-    (pattern :when-clause) (pattern :break-clause))
+    (pattern :when-clause) (pattern :break-or-final))
   (define-splicing-syntax-class when-clause
     (pattern (~seq #:when guard:expr) #:attr test #'guard)
     (pattern (~seq #:unless guard:expr) #:attr test #'(not guard)))
-  (define-splicing-syntax-class break-clause
-    (pattern (~seq #:break guard:expr)) (pattern (~seq #:final guard:expr)))
+  (define-splicing-syntax-class break-clause (pattern (~seq #:break guard:expr)))
+  (define-splicing-syntax-class final-clause (pattern (~seq #:final guard:expr)))
+  (define-splicing-syntax-class break-or-final
+    (pattern :break-clause) (pattern :final-clause))
+  (define-splicing-syntax-class break/final-or-body 
+    (pattern :break-or-final) (pattern body:expr))
   ) ; begin-for-syntax for ~for forms
 
 (define id-fn identity)
@@ -468,21 +473,40 @@
         (~optional (~seq #:break? break?))
         (~optional (~seq #:result (res:id ...)))
         ([accum base] ...)
-        (c:for-clause ...) bb:break-clause ... body:expr ...)
+        (c:for-clause ...) bb:break/final-or-body ...)
      #:with (body-res ...) (generate-temporaries #'(accum ...))
+     #:with (b ...) (template ((?@ . bb) ...))
+     #:with ((pre ...) (body ...)) (split-for-body #'(b ...) #'(b ...))
+     #:with (pre-body:break/final-or-body ...) #'(pre ...)
      #:with expanded-for
      #`(let ([abort? #f] [accum base] ...)
-       #,(let stxloop ([cs #'(c ... bb ...)])
+       #,(let clauseloop ([cs #'(c ...)])
            (syntax-parse cs
-             [() #`(let-values ([#,(if (attribute res)
-                                       #'(res ...)
-                                       #'(body-res ...))
-                                 (begin body ...)])
-                     (combiner accum ... 
-                               #,@(if (attribute res) #'(res ...) #'(body-res ...))))]
+             [() 
+              #:with do-body
+              #`(let-values ([#,(if (attribute res)
+                                    #'(res ...)
+                                    #'(body-res ...))
+                              (begin body ...)])
+                  (combiner accum ... 
+                            #,@(if (attribute res) #'(res ...) #'(body-res ...))))
+              #`(let ()
+                  ;; finalloop handles #:break and #:final in the body
+                  #,(let finalloop ([pbs (syntax->list #'(pre-body ...))])
+                      (if (null? pbs) #'do-body
+                          (syntax-parse (car pbs)
+                            [(#:break guard)
+                             #`(if guard 
+                                   (begin (set! abort? #t) (values accum ...))
+                                   (let () #,(finalloop (cdr pbs))))]
+                            [(#:final guard) 
+                             #`(if guard 
+                                   (begin (set! abort? #t) (let () #,(finalloop (cdr pbs))))
+                                   (let () #,(finalloop (cdr pbs))))]
+                            [(e:expr) #`(begin e #,(finalloop (cdr pbs)))]))))]
              [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
               (with-syntax* 
-               ([one-more-time (stxloop #'(rst ...))]
+               ([one-more-time (clauseloop #'(rst ...))]
                 [((ys ...) ...) #'(b.xs ...)]
                 [(([outer-binding ...]
                    outer-check
@@ -497,7 +521,9 @@
                 [new-loop (generate-temporary)]
                 [its-done #'(values accum ...)]
                 [skip-it #`(if (and post-guard ...) 
-                               (new-loop accum ... loop-arg ... ...)
+                               (if abort? 
+                                   (values accum ...) 
+                                   (new-loop accum ... loop-arg ... ...))
                                its-done)]
                 [do-it 
                  #`(if (and post-guard ...) 
@@ -522,7 +548,7 @@
                                 #,(whenloop (cdr ws)))]
                          [(#:final guard) 
                           #`(if guard 
-                                (begin (set! abort? #t) one-more-time)
+                                (begin (set! abort? #t) #,(whenloop (cdr ws)))
                                 #,(whenloop (cdr ws)))])))])
                #`(let-values (outer-binding ... ...)
                    ;; must shadow accum in new loop, in case body references it
@@ -538,20 +564,20 @@
      (if (attribute final)
          #'(let-values ([(accum ...) expanded-for]) (final accum ...))
          #'expanded-for)]
-    ;; this clause has unnamed accums, name them and then call the first clause
+    ;; this clause has unnamed accums; name them and then call the first clause
     [(_ (~optional (~seq #:final final))
         combiner
         (~optional (~seq #:break? break?))
         (~optional (~seq #:result (res:id ...)))
         (base ...) 
-        (c:for-clause ...) bb:break-clause ... body:expr ...)
+        (c:for-clause ...) bb:break/final-or-body ...)
      #:with (accum ...) (generate-temporaries #'(base ...))
      #`(~for/common #,@(if (attribute final) #'(#:final final) #'())
                     combiner 
                     #,@(if (attribute break?) #'(#:break? break?) #'())
                     #,@(if (attribute res) #'(#:result (res ...)) #'())
                     ([accum base] ...) 
-                    #,@(template (((?@ . c) ...) (?@ . bb) ... body ...)))]))
+                    #,@(template (((?@ . c) ...) (?@ . bb) ...)))]))
 
 ;; inserts #:when #t between each (non-#:when/unless) clause
 (define-syntax (~for*/common stx)
@@ -619,39 +645,39 @@
 
 (define-syntax (~for/fold stx) ; foldl
   (syntax-parse stx
-    [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+    [(_ ([accum init] ...) (c:for-clause ...) bb:break/final-or-body ...)
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for/common
                 #:final values (λ (accum ... res ...) (values res ...))
-                ([accum init] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
+                ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))]))
 (define-syntax (~for*/fold stx)
   (syntax-parse stx
-    [(_ ([accum init] ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+    [(_ ([accum init] ...) (c:for-clause ...) bb:break/final-or-body ...)
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for*/common 
                 #:final values (λ (accum ... res ...) (values res ...))
-                ([accum init] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
+                ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))]))
 
 (define-syntax (~for/lists stx)
   (syntax-parse stx
-    [(_ (accum ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+    [(_ (accum ...) (c:for-clause ...) bb:break/final-or-body ...)
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for/common 
                 #:final (λ (accum ...) (values (reverse accum) ...))
                 (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
-                ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
+                ([accum null] ...) ((?@ . c) ...) (?@ . bb) ...))]))
 (define-syntax (~for*/lists stx)
   (syntax-parse stx
-    [(_ (accum ...) (c:for-clause ...) bb:break-clause ... body:expr ...)
+    [(_ (accum ...) (c:for-clause ...) bb:break/final-or-body ...)
      #:with (res ...) (generate-temporaries #'(accum ...))
      ;; combiner drops old accums and uses result(s) of body as current accums
      (template (~for*/common 
                 #:final (λ (accum ...) (values (reverse accum) ...))
                 (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
-                ([accum null] ...) ((?@ . c) ...) (?@ . bb) ... body ...))]))
+                ([accum null] ...) ((?@ . c) ...) (?@ . bb) ...))]))
 
 ;; ~for/vector is an imperative mess
 (define-syntax (~for/vector stx) 
