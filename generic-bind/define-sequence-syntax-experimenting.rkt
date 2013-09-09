@@ -1,5 +1,5 @@
 #lang racket
-(require racket/private/for)
+(require syntax/unsafe/for-transform)
 (define-syntax (test stx)
   (syntax-case stx ()
     [(_ [(x ...) (form y ...)])
@@ -17,7 +17,7 @@
                      pre-guard
                      post-guard
                      (loop-arg ...))
-                    (expand-clause #'[(x ...) (form y ...)] #'[(x ...) (form y ...)])])
+                    (expand-for-clause #'[(x ...) (form y ...)] #'[(x ...) (form y ...)])])
        (printf "~a\n" (syntax->datum #'((outer-binding ...)
                      outer-check
                      (loop-binding ...)
@@ -79,4 +79,14 @@
    ((pos-next pos)))
 
 ;(test [(x) 10])
-(test [(v) (in-list (list 1))])
+;(test [(v) (in-list (list 1))])
+(test [(v) (stream-filter identity (in-range 10))])
+((((pos->vals pos-next init pos-cont? val-cont? all-cont?) ; outer binding
+   (make-sequence '(v) (stream-filter identity (in-range 10)))))
+ (void) ; outer check
+ ((pos init))  ; loop binding
+ (if pos-cont? (pos-cont? pos) #t) ; pos guard
+ (((v) (pos->vals pos))) ; inner binding
+ (if val-cont? (val-cont? v) #t) ; pre guard
+ (if all-cont? (all-cont? pos v) #t) ; post guard
+ ((pos-next pos))) ; loop arg
