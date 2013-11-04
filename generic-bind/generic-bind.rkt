@@ -484,12 +484,11 @@
            (syntax-parse cs
              [() 
               #:with do-body
-              #`(let-values ([#,(if (attribute res)
-                                    #'(res ...)
-                                    #'(body-res ...))
-                              (begin body ...)])
-                  (combiner accum ... 
-                            #,@(if (attribute res) #'(res ...) #'(body-res ...))))
+              ;; this must be a call-with-values because the number of results
+              ;; is unpredictable (may be 0 values or multiple values)
+              #`(call-with-values 
+                 (lambda () body ...)
+                 (lambda results (apply combiner accum ... results)))
               #`(let ()
                   ;; finalloop handles #:break and #:final in the body
                   #,(let finalloop ([pbs (syntax->list #'(pre-body ...))])
@@ -625,8 +624,8 @@
                          #,@(if (attribute res) #'(#:result (res ...)) #'())
                          (base ...) x (... ...))))]))
 
-(define-syntax-rule (~for x ...) (~for/common #:final void void ((void)) x ...))
-(define-syntax-rule (~for* x ...) (~for*/common #:final void void ((void)) x ...))
+(define-syntax-rule (~for x ...) (~for/common void ((void)) x ...))
+(define-syntax-rule (~for* x ...) (~for*/common void ((void)) x ...))
 
 ;; ~for/list ~for*/list and ~for/lists probably need a "right folding" for/common
 ;;   but for now, just reverse the output

@@ -346,7 +346,7 @@
  (for/fold ([sum 0]) ([x '(1 2 3 4 5 6)]) (+ x sum)))
 
 (check-false (~for/and ([x (list #t #f #t)]) (displayln x) x))
-;; should print
+;; should print (when run without the check-false)
 ;#t
 ;#f
 ;#f
@@ -506,3 +506,45 @@
                 (define m i) #:break (= m 2) 
                 (define k i) #:final (= k 2)
                 (list i j)))
+
+;; check 0 accums ----------
+;; example due to khinsen
+(define (gen2 seq)
+  (in-generator
+   (let ([refs (make-hash)])
+     (~for ([($: a b) seq])
+           (hash-set! refs a b)
+           (yield a)))))
+
+(check-equal? '(a c) (sequence->list (gen2 (list (cons 'a 'b) (cons 'c 'd)))))
+(define (gen3 seq)
+  (in-generator
+   (let ([refs (make-hash)])
+     (~for* ([($: a b) seq])
+            (hash-set! refs a b)
+            (yield a)))))
+
+(check-equal? '(a c) (sequence->list (gen3 (list (cons 'a 'b) (cons 'c 'd)))))
+(check-equal? 
+ null 
+ (call-with-values (lambda () (~for/fold () ([x '(1 2)]) (values))) (lambda x x)))
+(check-equal? 
+ (call-with-values (lambda () (~for/fold () ([x '(1 2)]) (values))) (lambda x x))
+ (call-with-values (lambda () (for/fold () ([x '(1 2)]) (values))) (lambda x x)))
+(check-equal? 
+ null 
+ (call-with-values (lambda () (~for*/fold () ([x '(1 2)]) (values))) (lambda x x)))
+(check-equal? 
+ (call-with-values (lambda () (~for*/fold () ([x '(1 2)]) (values))) (lambda x x))
+ (call-with-values (lambda () (for*/fold () ([x '(1 2)]) (values))) (lambda x x)))
+;; should still fail when wrong number of accums produced
+(check-exn exn:fail? (lambda () (~for/fold () ([x '(1 2)]) x)))
+(check-exn exn:fail? (lambda () (~for*/fold () ([x '(1 2)]) x)))
+
+;; ~for and ~for* should drop any results and result should be void
+(check-equal? (void) (~for ([x (list 1 2 3)]) x))
+(check-equal? (void) (~for* ([x (list 1 2 3)]) x))
+(check-equal? (call-with-values (lambda () (~for ([x (list 1 2 3)]) x)) (lambda x x))
+              (call-with-values (lambda () (for ([x (list 1 2 3)]) x)) (lambda x x)))
+(check-equal? (call-with-values (lambda () (~for* ([x (list 1 2 3)]) x)) (lambda x x))
+              (call-with-values (lambda () (for* ([x (list 1 2 3)]) x)) (lambda x x)))
