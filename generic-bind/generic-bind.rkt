@@ -471,7 +471,6 @@
     [(_ (~optional (~seq #:final final))
         combiner
         (~optional (~seq #:break? break?))
-        (~optional (~seq #:result (res:id ...)))
         ([accum base] ...)
         (c:for-clause ...) bb:break/final-or-body ...)
      #:with (body-res ...) (generate-temporaries #'(accum ...))
@@ -567,14 +566,12 @@
     [(_ (~optional (~seq #:final final))
         combiner
         (~optional (~seq #:break? break?))
-        (~optional (~seq #:result (res:id ...)))
         (base ...) 
         (c:for-clause ...) bb:break/final-or-body ...)
      #:with (accum ...) (generate-temporaries #'(base ...))
      #`(~for/common #,@(if (attribute final) #'(#:final final) #'())
                     combiner 
                     #,@(if (attribute break?) #'(#:break? break?) #'())
-                    #,@(if (attribute res) #'(#:result (res ...)) #'())
                     ([accum base] ...) 
                     #,@(template (((?@ . c) ...) (?@ . bb) ...)))]))
 
@@ -584,7 +581,6 @@
     [(_ (~optional (~seq #:final fin))
         comb
         (~optional (~seq #:break? b?))
-        (~optional (~seq #:result (res:id ...)))
         (base ...) 
         ((~seq sb:seq-binding ... wb:when-or-break ...) ...) body ...)
      #:with ((new-sb ...) ...)
@@ -599,15 +595,13 @@
      #`(~for/common #,@(if (attribute fin) #'(#:final fin) #'())
                     comb 
                     #,@(if (attribute b?) #'(#:break? b?) #'())
-                    #,@(if (attribute res) #'(#:result (res ...)) #'())
                     (base ...) (new-clause ...) body ...)]))
 
 (define-syntax (mk~for/ stx)
   (syntax-parse stx 
     [(_ name combiner (base ...) 
         (~optional (~seq #:final fin))
-        (~optional (~seq #:break? b?))
-        (~optional (~seq #:result (res:id ...))))
+        (~optional (~seq #:break? b?)))
      #:with new-name (format-id #'name "~~for/~a" #'name)
      #:with new-name* (format-id #'name "~~for*/~a" #'name)
      #`(begin 
@@ -615,13 +609,11 @@
            (~for/common #,@(if (attribute fin) #'(#:final fin) #'())
                         combiner 
                         #,@(if (attribute b?) #'(#:break? b?) #'())
-                        #,@(if (attribute res) #'(#:result (res ...)) #'())
                         (base ...) x (... ...)))
          (define-syntax-rule (new-name* x (... ...)) 
            (~for*/common #,@(if (attribute fin) #'(#:final fin) #'()) 
                          combiner 
                          #,@(if (attribute b?) #'(#:break? b?) #'())
-                         #,@(if (attribute res) #'(#:result (res ...)) #'())
                          (base ...) x (... ...))))]))
 
 (define-syntax-rule (~for x ...) (~for/common void ((void)) x ...))
@@ -638,9 +630,9 @@
 (mk~for/ or (λ (acc y) (or acc y)) (#f) #:break? id-fn)
 (mk~for/ sum + (0))
 (mk~for/ product * (1))
-(mk~for/ hash hash-set ((hash)) #:result (key val))
-(mk~for/ hasheq hash-set ((hasheq)) #:result (key val))
-(mk~for/ hasheqv hash-set ((hasheqv)) #:result (key val))
+(mk~for/ hash hash-set ((hash)))
+(mk~for/ hasheq hash-set ((hasheq)))
+(mk~for/ hasheqv hash-set ((hasheqv)))
 
 (define-syntax (~for/fold stx) ; foldl
   (syntax-parse stx

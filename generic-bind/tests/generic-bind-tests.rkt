@@ -548,3 +548,46 @@
               (call-with-values (lambda () (for ([x (list 1 2 3)]) x)) (lambda x x)))
 (check-equal? (call-with-values (lambda () (~for* ([x (list 1 2 3)]) x)) (lambda x x))
               (call-with-values (lambda () (for* ([x (list 1 2 3)]) x)) (lambda x x)))
+
+;; ~for/hash and friends
+(check-equal? (~for/hash ([x (list 1 2 3)] [y '(a b c)]) (values x y))
+              (hash 1 'a 2 'b 3 'c))
+(check-exn exn:fail:contract:arity?
+           (λ () (~for/hash ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn exn:fail:contract:arity? 
+           (λ () (~for/hash ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+
+(check-equal? (~for*/hash ([x (list 1 2 3)] [y '(a b c)]) (values x y))
+              (hash 1 'c 2 'c 3 'c))
+(check-exn exn:fail:contract:arity?
+           (λ () (~for*/hash ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn exn:fail:contract:arity? 
+           (λ () (~for*/hash ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+
+(check-equal? (~for/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x y))
+              (hasheq 1 'a 2 'b 3 'c))
+(check-exn exn:fail:contract:arity?
+           (λ () (~for/hasheq ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn exn:fail:contract:arity? 
+           (λ () (~for/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+
+(check-equal? (~for*/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x y))
+              (hasheq 1 'c 2 'c 3 'c))
+(check-exn exn:fail:contract:arity?
+           (λ () (~for*/hasheq ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn exn:fail:contract:arity? 
+           (λ () (~for*/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+
+(check-equal? (~for/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x y))
+              (hasheqv 1 'a 2 'b 3 'c))
+(check-exn exn:fail:contract:arity?
+           (λ () (~for/hasheqv ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn exn:fail:contract:arity? 
+           (λ () (~for/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+
+(check-equal? (~for*/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x y))
+              (hasheqv 1 'c 2 'c 3 'c))
+(check-exn exn:fail:contract:arity?
+           (λ () (~for*/hasheqv ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn exn:fail:contract:arity? 
+           (λ () (~for*/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
