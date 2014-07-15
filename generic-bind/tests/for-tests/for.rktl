@@ -8,18 +8,7 @@
          "for-util.rkt")
 (require rackunit)
 
-(require 
- (rename-in 
-  "../../generic-bind.rkt"
-  [~define define] [~lambda lambda] [~λ λ] [~let let] [~let* let*]
-  [~for for] [~for/list for/list] [~for/vector for/vector] [~for/lists for/lists]
-  [~for/fold for/fold] [~for/first for/first] [~for/last for/last] 
-  [~for/and for/and] [~for/or for/or] [~for/sum for/sum] [~for/product for/product] 
-  [~for/hash for/hash] [~for/hasheq for/hasheq] [~for/hasheqv for/hasheqv]
-  [~for* for*] [~for*/list for*/list] [~for*/vector for*/vector] [~for*/lists for*/lists]
-  [~for*/fold for*/fold] [~for*/first for*/first] [~for*/last for*/last] 
-  [~for*/and for*/and] [~for*/or for*/or] [~for*/sum for*/sum] [~for*/product for*/product]
-  [~for*/hash for*/hash] [~for*/hasheq for*/hasheq] [~for*/hasheqv for*/hasheqv]))
+(require "../../as-rkt-names.rkt")
 
 (test-sequence [(0 1 2)] 3)
 (test-sequence [(0 1 2)] (in-range 3))

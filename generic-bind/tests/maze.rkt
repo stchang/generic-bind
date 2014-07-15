@@ -25,9 +25,7 @@
     [(_ x y z) (r:if x y z)]))
 (define-syntax-rule (list->vector lst) (r:list->vector (mlist->list lst)))
   
-(require (rename-in "../generic-bind.rkt"
-                    [~define define] [~lambda lambda]
-                    [~let let] [~let* let*] [~letrec letrec]))
+(require "../as-rkt-names.rkt")
 
 ;; informal timing: (n=100000)
 ;; compile time: (3x slowdown)

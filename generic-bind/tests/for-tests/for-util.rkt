@@ -5,7 +5,8 @@
 (provide test-multi-sequence
          test-sequence)
 (require 
- (rename-in 
+  "../../as-rkt-names.rkt"
+ #;(rename-in 
   "../../generic-bind.rkt"
   [~define define] [~lambda lambda] [~λ λ] [~let let] [~let* let*]
   [~for for] [~for/list for/list] [~for/vector for/vector] [~for/lists for/lists]
