@@ -1,13 +1,10 @@
 #lang scribble/manual
 @(require scribble/eval
-          (for-syntax "main.rkt")
-          "main.rkt"
-          (for-label "main.rkt"
-                     racket))
+          (for-label generic-bind racket))
 
 @title{Racket Generic Binding Forms}
 
-@defmodule[generic-bind #:use-sources ("main.rkt")]
+@defmodule[generic-bind]
 
 This library implements new Racket binding forms (ie, @racket[~define], @racket[~lambda], @racket[~let], etc.) that support generic binding instances. A generic binding instance is a syntax object that implements an "interface" (currently just some syntax properties) that the binding forms then use to determine how to proceed with the binding. 
 
@@ -16,7 +13,7 @@ This moves the binding "logic" to the binding site itself and enables one bindin
 The hope is that the forms in this library can be used in place of their analogous Racket counterparts.
 
 @(define the-eval (make-base-eval))
-@(the-eval '(require "main.rkt"))
+@(the-eval '(require generic-bind))
 
 @author[@author+email["Stephen Chang" "stchang@racket-lang.org"]]
 
