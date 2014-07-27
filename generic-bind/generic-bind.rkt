@@ -1,5 +1,6 @@
 #lang racket
-(require (for-syntax syntax/parse
+(require syntax/parse
+         (for-syntax syntax/parse
                      racket/syntax
                      racket/list)) ; append-map
 (require (for-syntax syntax/parse/experimental/template))
@@ -21,7 +22,7 @@
 ;; [o] 2013-08-21: fix error msgs
 ;;                 - named ~let dup id references define
 
-(provide ~vs $: $list $null ; dont export ~m
+(provide ~vs $: $list $null $stx ; dont export ~m
          ~define ~lambda ~case-lambda ~case-define
          (rename-out [~lambda ~λ] [~lambda ~lam] [~lambda ~l] 
                      [~define ~def] [~define ~d]
@@ -124,6 +125,30 @@
                 [nested-idss ,null])
               #'(void))]))
 
+(define-syntax ($stx stx)
+  (syntax-parse stx
+    [(_ pat pat-dir ...)
+     (add-syntax-properties
+      `([definer ,#'$stx-definer]
+        [letter ,#'$stx-letter]
+        ;; need to capture ids in unexpanded ctx so just store datums
+        [ids ,(syntax->datum stx)]
+        [let-only #f]
+        [nested-definers ,#'()]
+        [nested-idss ,null])
+      #'(void))]))
+
+(define-syntax $stx-definer
+  (syntax-parser
+    [(definer ($stx pat pat-dir ...) stx)
+     #'(define/syntax-parse pat pat-dir ... stx)]))
+(define-syntax $stx-letter
+  (syntax-parser
+    [(letter ([($stx pat pat-dir ...) stx] ...) body ...)
+     #'(syntax-parse (stx ...)
+         [(pat ...) pat-dir ... ... body ...])]))
+     
+
 ;; generic match bindings where the outer form is a list or cons
 ;; ie, just match list or match cons
 (define-syntax-rule (match-listrest-define (x ... rst) e)
@@ -199,7 +224,27 @@
                            [let-only #f]
                            [nested-definers ,#'()]
                            [nested-idss ,null])
-                         #'(void))])))]))
+                         #'(void))])))]
+    [(_ name)
+     #:with $name (format-id #'name "$~a" #'name)
+     #:with match-$name-define (format-id #'here "match-~a-define" #'name)
+     #:with match-$name-let (format-id #'here "match-~a-let" #'name)
+     #:with ooo (quote-syntax ...)
+     #'(begin
+         (define-syntax-rule (match-$name-define (x ooo) e) (match-define (name x ooo) e))
+         (define-syntax-rule (match-$name-let ([(x ooo) e] (... ...)) body (... ...)) 
+           (match-let ([(name x ooo) e] (... ...)) body (... ...)))
+         (define-syntax ($name stx)
+           (syntax-parse stx 
+             [(_ x ooo) (add-syntax-properties
+                         `([definer ,#'match-$name-define]
+                           [letter ,#'match-$name-let]
+                           [ids ,(syntax->datum #'(x ooo))]
+                           [let-only #f]
+                           [nested-definers ,#'()]
+                           [nested-idss ,null])
+                         #'(void))])))]
+    ))
 
 
 (begin-for-syntax ;; ~struct syntax classes

@@ -1,6 +1,7 @@
 #lang racket
 (require rackunit)
-(require "../generic-bind.rkt")
+(require "../generic-bind.rkt"
+         syntax/parse) ; need this so that ~seq and syntax-classes are bound
 
 ;; define non-fns
 (~define x1 (+ 1 2))
@@ -21,6 +22,12 @@
 (struct A (x y))
 (~define ($ (A x7 y7)) (A 101 202))
 (check-equal? x7 101) (check-equal? y7 202)
+
+;; $stx
+(~define ($stx ((~seq kw:keyword arg:expr) ...)) #'(#:a 1 #:b 2 #:c 3))
+(check-equal? (syntax->datum #'(kw ...)) '(#:a #:b #:c))
+(check-equal? (syntax->datum #'(arg ...)) '(1 2 3))
+(check-equal? (syntax->datum #'([kw . arg] ...)) '([#:a . 1] [#:b . 2] [#:c . 3]))
 
 ;; define fns
 (~define (f1 x [y 10] #:z [z 0]) (+ x y z))
@@ -109,6 +116,11 @@
 
 (check-equal? (~let ([($ (list x58 x59)) (list 158 159)]) (list x59 x58))
               (list 159 158))
+
+(check-equal? (~let ([($stx ((~seq kw:keyword arg:expr) ...))
+                      #'(#:a 1 #:b 2 #:c 3)])
+                    (syntax->datum #'(kw ...)))
+              '(#:a #:b #:c))
 
 ;; values
 (check-equal? (~let ([(~vs v17 v27) (values 17 27)]) (+ v17 v27)) 44)
@@ -414,6 +426,19 @@
 (check-equal? (C-c c) 7)
 (check-equal? (C-d c) 20)
 (check-equal? (cf c) 44)
+
+;; define-match-bind on just an id
+(define-match-bind hash-table)
+(~define ($hash-table [keys vals] ...) (hash 'a 1 'b 2 'c 3))
+(check-match keys (list-no-order 'a 'b 'c))
+(check-match vals (list-no-order 1 2 3))
+(for ([key (in-list keys)]
+      [val (in-list vals)])
+  (case key
+    [(a) (check-equal? val 1)]
+    [(b) (check-equal? val 2)]
+    [(c) (check-equal? val 3)]
+    [else (error "this should never happen")]))
 
 ;; this test tripped up my ~for implementation bc there are no "inner bindings"
 (check-equal? (~for/list ([v (in-list (list 1))]) (add1 v)) (list 2))

@@ -1,6 +1,6 @@
 #lang scribble/manual
 @(require scribble/eval
-          (for-label generic-bind racket))
+          (for-label generic-bind racket syntax/parse))
 
 @title{Racket Generic Binding Forms}
 
@@ -13,7 +13,7 @@ This moves the binding "logic" to the binding site itself and enables one bindin
 The hope is that the forms in this library can be used in place of their analogous Racket counterparts.
 
 @(define the-eval (make-base-eval))
-@(the-eval '(require generic-bind))
+@(the-eval '(require generic-bind racket/match syntax/parse))
 
 @author[@author+email["Stephen Chang" "stchang@racket-lang.org"]]
 
@@ -55,6 +55,10 @@ A few generic binding instances are currently supported. Defining new generic bi
 
 @defthing[$null _]{ A @racket[match] binding instance for @racket[null].}
 
+@defform[($stx pattern pattern-directive ...)]{
+A binding instance for parsing syntax-objects with @racket[syntax-parse].
+}
+
                                 
 @; Core Generic Binding Forms ------------------------------------------------------
 @section[#:tag "binding-forms"]{Core Generic Binding Forms}
@@ -95,8 +99,13 @@ x6 ;9999
 
 (struct A (x y))
 (~define ($ (A x7 y7)) (A 101 202))
-x7;101
-y7 ;202)
+x7 ;101
+y7 ;202
+
+(~define ($stx ((~seq kw:keyword arg:expr) ...)) #'(#:a 1 #:b 2 #:c 3))
+#'(kw ...)
+#'(arg ...)
+#'([kw . arg] ...)
 ]
 
 @racket[define]-like function examples:
@@ -567,14 +576,21 @@ All the forms in this section are the same as their Racket counterparts (see @ra
 
 Only defining @racket[match]-specific new binding instances are currently possible.
 
-@defform[(define-match-bind (name x ...))]{Defines a new binding instance @racket[$name] that binds using the match pattern @racket[(name x ...)].
+@defform*[((define-match-bind (name x ...))
+           (define-match-bind name))]{
+Defines a new binding instance @racket[$name] that binds using the match pattern @racket[(name x ...)].
 
 @interaction[#:eval the-eval
 (struct B (x y z))
 (define-match-bind (B x y z))
 
 (~define (bf ($B x y z)) (+ x y z))
-(bf (B 20 40 60)); 120)
+(bf (B 20 40 60)) ; 120
+
+(define-match-bind hash-table)
+(~define ($hash-table [keys vals] ...) (hash 'a 1 'b 2 'c 3))
+keys
+vals
 ]}
 
 @defform[(~struct ...)]{Exactly like @racket[struct] except a new generic binding instance is also defined. Equivalent to using @racket[struct] and @racket[define-match-bind].
