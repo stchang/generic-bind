@@ -23,7 +23,7 @@
 ;; [o] 2013-08-21: fix error msgs
 ;;                 - named ~let dup id references define
 
-(provide ~vs $: $list $null $stx ; dont export ~m
+(provide ~vs $: $list $null $stx $and ; dont export ~m
          ~define ~lambda ~case-lambda ~case-define
          (rename-out [~lambda ~λ] [~lambda ~lam] [~lambda ~l] 
                      [~define ~def] [~define ~d]
@@ -268,6 +268,44 @@
        #'(let-values ([(x.name ...) expr])
            (~define x x.name) ...
            body ...)])))
+
+;; $and
+(define-syntax $and
+  (lambda (stx)
+    (syntax-parse stx
+      [($and x:id-or-bind/non-let ...)
+       (add-syntax-properties
+        `([definer ,#'$and-definer]
+          [letter ,#'$and-letter])
+        #'(void))]
+      [($and x0:id-or-bind/let x:id-or-bind/let ...)
+       (add-syntax-properties
+        `([definer ,#'$and-definer]
+          [letter ,#'$and-letter]
+          [let-only #t]
+          [names ,#'x0.names])
+        #'(void))])))
+(define-syntax $and-definer
+  (lambda (stx)
+    (syntax-parse stx
+      [(def (_) expr)
+       #'(define-values () (begin expr (values)))]
+      [(def (_ x0:id-or-bind/let x:id-or-bind/let ...) expr)
+       #'(begin
+           (define-values x0.names expr)
+           (x0.definer x0 (values . x0.names))
+           (x.definer x (values . x0.names)) ...)])))
+(define-syntax $and-letter
+  (lambda (stx)
+    (syntax-parse stx
+      [(letter ([(_) expr]) body ...+)
+       #'(let () expr body ...)]
+      [(letter ([(_ x0:id-or-bind/let x:id-or-bind/let ...) expr]) body ...+)
+       #'(let-values ([x0.names expr])
+           (x0.definer x0 (values . x0.names))
+           (x.definer x (values . x0.names)) ...
+           body ...)])))
+           
 
 ;; ----------------------------------------------------------------------------
 ;; ~define
