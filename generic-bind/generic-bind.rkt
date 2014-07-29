@@ -100,6 +100,15 @@
                   #:attr definer #'define
                   #:attr letter #'let
                   ))
+  (define-syntax-class id-or-bind/let
+    #:auto-nested-attributes
+    (pattern :bind/let-only)
+    (pattern :id-or-bind/non-let #:attr names #'(name))
+    (pattern (x:id ...)
+             #:with names (generate-temporaries #'(x ...))
+             #:attr definer #'define-values
+             #:attr letter #'let-values
+             ))
   ) ;; end begin-for-syntax
 
 
@@ -352,18 +361,6 @@
                     (template 
                      ((?@ . arg0.new-arg) (?@ . arg.new-arg) ... . rest))
              #:attr defs (template ((?@ . arg0.def) (?@ . arg.def) ...))))
-  (define-syntax-class id-or-bind
-    #:auto-nested-attributes
-    (pattern :bind #:attr name (generate-temporary))
-    (pattern x:id #:attr name (generate-temporary)
-                  #:attr definer #'define
-                  #:attr letter #'let
-                  )
-     ;; match values, like in for forms
-    (pattern (x:id ...) #:attr name (generate-temporary) ; shouldnt get used
-                        #:attr definer #'define-values
-                        #:attr letter #'let-values
-                        ))
 
     ;; ~case-lambda syntax-classes
     (define-syntax-class case-lam-function-header
@@ -437,24 +434,23 @@
      #`(let ()
          (~define (loop x ...) body ...)
          (loop e ...))]
-    [(_ ([x:id-or-bind e] ...) body ...)
-     (with-syntax ([(new-e ...) (map syntax-local-introduce (syntax->list #'(e ...)))])
-       #`(let ()
-           (x.definer x new-e) ...
-           body ...))]))
+    [(_ ([x:id-or-bind/let e] ...) body ...)
+     #`(let-values ([x.names e] ...)
+         (x.definer x (values . x.names)) ...
+         body ...)]))
 
 (define-syntax (~let* stx)
   (syntax-parse stx
-    [(_ ([x:id-or-bind e]) body ...) 
+    [(_ ([x:id-or-bind/let e]) body ...) 
      #`(x.letter ([x e]) 
          body ...)]
-    [(_ ([x:id-or-bind e] rst ...) body ...)
+    [(_ ([x:id-or-bind/let e] rst ...) body ...)
      #`(x.letter ([x e])
          (~let* (rst ...) body ...))]))
 
 (define-syntax (~letrec stx)
   (syntax-parse stx
-    [(_ ([x:id-or-bind e] ...) body ...)
+    [(_ ([x:id-or-bind/let e] ...) body ...)
      #`(let ()
          (x.definer x e) ...
          body ...)]))
