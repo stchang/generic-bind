@@ -63,6 +63,13 @@ A binding instance for parsing syntax-objects with @racket[syntax-parse].
 A binding instance that binds each @racket[b] binding.  
 }
 
+@defform*/subs[(($c db contract-expr)
+                ($c b (values contract-expr ...)))
+               ([db define-allowable-generic-binding]
+                [b generic-binding])]{
+A binding instance that binds @racket[b] or @racket[db] with a contract.  
+}
+
 
 @; Core Generic Binding Forms ------------------------------------------------------
 @section[#:tag "binding-forms"]{Core Generic Binding Forms}

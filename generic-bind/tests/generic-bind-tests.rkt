@@ -43,6 +43,20 @@
 (check-equal? lst1-0 'lst1-0)
 (check-equal? lst1-1 'lst1-1)
 
+;; $c
+(~define ($c x real?) 3.14159)
+(check-equal? x 3.14159)
+(check-exn exn:fail:contract?
+           (λ ()
+             (~define ($c x real?) "not a real number")
+             (void)))
+(~define ($c ($list f0) (list/c (-> real? real?)))
+         (list (λ (x) x)))
+(check-equal? (f0 3.14159) 3.14159)
+(check-exn exn:fail:contract?
+           (λ ()
+             (f0 "not a real number")))
+
 ;; define fns
 (~define (f1 x [y 10] #:z [z 0]) (+ x y z))
 (check-equal? (f1 100) 110)
