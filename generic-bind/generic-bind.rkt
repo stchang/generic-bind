@@ -1,5 +1,6 @@
 #lang racket
 (require syntax/parse
+         syntax/parse/define
          (for-syntax syntax/parse
                      racket/syntax
                      racket/list)) ; append-map
@@ -50,15 +51,16 @@
                     [exn:fail:syntax? (λ _ #f)] ;; ie keyword as datum
                     [exn:fail? (λ _ (printf "uh oh\n"))])
       (local-expand stx 'expression null)))
+  
 
   ;; accessors
   (define (bind-definer stx) (syntax-property stx 'definer))
   (define (bind-letter stx) (syntax-property stx 'letter))
-  (define (bind-ids stx) (syntax-property stx 'ids))
-  (define (bind-nested-definers stx) (syntax-property stx 'nested-definers))
-  (define (bind-nested-idss stx) (syntax-property stx 'nested-idss))
-
-  (define (bind? stx) (and (bind-definer stx) (bind-ids stx)))
+  (define (bind-names stx) ; used only for let-only bindings
+    (and (bind-let-only? stx)
+         (syntax-property stx 'names)))
+  
+  (define (bind? stx) (bind-definer stx))
   (define (bind-let-only? stx) (syntax-property stx 'let-only))
   
   (define-syntax-class bind
@@ -68,18 +70,7 @@
       #:when (bind? #'expanded-b)
       #:attr definer (bind-definer #'expanded-b)
       #:attr letter (bind-letter #'expanded-b)
-      #:attr ids (datum->syntax #'b (bind-ids #'expanded-b))
-      #:attr nested-defs
-      (let ([ids-lst (syntax->list #'ids)])
-        (if ids-lst ; for non-list patterns
-            (datum->syntax #'b
-              (for/list 
-                ([nested-definer 
-                  (syntax->list (bind-nested-definers #'expanded-b))]
-                 [nested-ids (bind-nested-idss #'expanded-b)]
-                 [id (syntax->list #'ids)])
-                (list nested-definer (datum->syntax #'b nested-ids) id)))
-            #'()))))
+      ))
   ;; - need the following separate class because some instances 
   ;;   (ie anything involving values) needs the target of the bind to work
   ;; - for example, values can't be used in function defs
@@ -90,21 +81,34 @@
     (pattern :bind 
              #:fail-when (bind-let-only? #'expanded-b)
                          (format "can't use ~a pattern in non-let binding ctxt"
-                                 (syntax->datum #'b))))
+                                 (syntax->datum #'b))
+             #:attr name (generate-temporary)
+             ))
   (define-syntax-class bind/let-only
     #:description "a generic bind instance for let contexts only"
     #:auto-nested-attributes
     (pattern :bind 
              #:fail-when (not (bind-let-only? #'expanded-b))
              (format "can't use ~a pattern in let-only binding ctxt"
-                     (syntax->datum #'b))))
+                     (syntax->datum #'b))
+             #:attr names (bind-names #'expanded-b)
+             ))
   (define-syntax-class id-or-bind/non-let
     #:auto-nested-attributes
-    (pattern :bind/non-let #:attr name (generate-temporary))
+    (pattern :bind/non-let)
     (pattern x:id #:attr name (generate-temporary)
                   #:attr definer #'define
                   #:attr letter #'let
-                  #:attr ids #'x))
+                  ))
+  (define-syntax-class id-or-bind/let
+    #:auto-nested-attributes
+    (pattern :bind/let-only)
+    (pattern :id-or-bind/non-let #:attr names #'(name))
+    (pattern (x:id ...)
+             #:with names (generate-temporaries #'(x ...))
+             #:attr definer #'define-values
+             #:attr letter #'let-values
+             ))
   ) ;; end begin-for-syntax
 
 
@@ -116,26 +120,26 @@
 (define-syntax (~m stx)
   (syntax-parse stx
     [(_ pat) (add-syntax-properties
-              `([definer ,#'match-define]
-                [letter ,#'match-let]
-                ;; need to capture ids in unexpanded ctx so just store datums
-                [ids ,(syntax->datum #'pat)]
-                [let-only #f]
-                [nested-definers ,#'()]
-                [nested-idss ,null])
+              `([definer ,#'$-definer]
+                [letter ,#'$-letter])
               #'(void))]))
+(define-syntax $-definer
+  (lambda (stx)
+    (syntax-parse stx
+      [(def ($ pat) expr)
+       #'(match-define pat expr)])))
+(define-syntax $-letter
+  (lambda (stx)
+    (syntax-parse stx
+      [(letter ([($ pat) expr]) body ...+)
+       #'(match-let ([pat expr]) body ...)])))
 
 (define-syntax ($stx stx)
   (syntax-parse stx
     [(_ pat pat-dir ...)
      (add-syntax-properties
       `([definer ,#'$stx-definer]
-        [letter ,#'$stx-letter]
-        ;; need to capture ids in unexpanded ctx so just store datums
-        [ids ,(syntax->datum stx)]
-        [let-only #f]
-        [nested-definers ,#'()]
-        [nested-idss ,null])
+        [letter ,#'$stx-letter])
       #'(void))]))
 
 (define-syntax $stx-definer
@@ -151,58 +155,42 @@
 
 ;; generic match bindings where the outer form is a list or cons
 ;; ie, just match list or match cons
-(define-syntax-rule (match-listrest-define (x ... rst) e)
+(define-simple-macro (match-listrest-define (_ x ... (~datum :) rst) e)
   (match-define (list-rest x ... rst) e))
-(define-syntax-rule (match-listrest-let ([(x ... rst) e] ...) body ...) 
+(define-simple-macro (match-listrest-let ([(_ x ... (~datum :) rst) e] ...) body ...) 
   (match-let ([(list-rest x ... rst) e] ...) body ...))
-(define-syntax-rule (match-list-define (x ...) e)
+(define-syntax-rule (match-list-define (_ x ...) e)
   (match-define (list x ...) e))
-(define-syntax-rule (match-list-let ([(x ...) e] ...) body ...) 
+(define-syntax-rule (match-list-let ([(_ x ...) e] ...) body ...) 
   (match-let ([(list x ...) e] ...) body ...))
 (define-syntax ($list stx)
   (syntax-parse stx #:datum-literals (:)
     [(_ x ... : rst) (add-syntax-properties
                       `([definer ,#'match-listrest-define]
-                        [letter ,#'match-listrest-let]
-                        [ids ,(syntax->datum #'(x ... rst))]
-                        [let-only #f]
-                        [nested-definers ,#'()]
-                        [nested-idss ,null])
+                        [letter ,#'match-listrest-let])
                       #'(void))]
     [(_ x ...) (add-syntax-properties
                 `([definer ,#'match-list-define]
-                  [letter ,#'match-list-let]
-                  [ids ,(syntax->datum #'(x ...))]
-                  [let-only #f]
-                  [nested-definers ,#'()]
-                  [nested-idss ,null])
+                  [letter ,#'match-list-let])
                 #'(void))]))
-(define-syntax-rule (match-cons-define (x xs) e) (match-define (cons x xs) e))
-(define-syntax-rule (match-cons-let ([(x xs) e] ...) body ...) 
+(define-syntax-rule (match-cons-define (_ x xs) e) (match-define (cons x xs) e))
+(define-syntax-rule (match-cons-let ([(_ x xs) e] ...) body ...) 
   (match-let ([(cons x xs) e] ...) body ...))
 (define-syntax ($: stx)
   (syntax-parse stx 
     [(_ x xs) (add-syntax-properties
                `([definer ,#'match-cons-define]
-                 [letter ,#'match-cons-let]
-                 [ids ,(syntax->datum #'(x xs))]
-                 [let-only #f]
-                 [nested-definers ,#'()]
-                 [nested-idss ,null])
+                 [letter ,#'match-cons-let])
                #'(void))]))
-(define-syntax-rule (match-null-define (x ...) e) ; ignore args
+(define-syntax-rule (match-null-define _ e) ; ignore args
   (match-define '() e))
-(define-syntax-rule (match-null-let ([(x ...) e] ...) body ...) 
+(define-syntax-rule (match-null-let ([_ e] ...) body ...) 
   (match-let (['() e] ...) body ...))
 (define-syntax ($null stx)
   (syntax-case stx ()
     [_ (add-syntax-properties
         `([definer ,#'match-null-define]
-          [letter ,#'match-null-let]
-          [ids ,null]
-          [let-only #f]
-          [nested-definers ,#'()]
-          [nested-idss ,null])
+          [letter ,#'match-null-let])
         #'(void))]))
 
 (define-syntax (define-match-bind stx)
@@ -212,18 +200,14 @@
      #:with match-$name-define (format-id #'here "match-~a-define" #'name)
      #:with match-$name-let (format-id #'here "match-~a-let" #'name)
      #'(begin
-         (define-syntax-rule (match-$name-define (x ...) e) (match-define (name x ...) e))
-         (define-syntax-rule (match-$name-let ([(x ...) e] (... ...)) body (... ...)) 
+         (define-syntax-rule (match-$name-define (_ x ...) e) (match-define (name x ...) e))
+         (define-syntax-rule (match-$name-let ([(_ x ...) e] (... ...)) body (... ...)) 
            (match-let ([(name x ...) e] (... ...)) body (... ...)))
          (define-syntax ($name stx)
            (syntax-parse stx 
              [(_ x ...) (add-syntax-properties
                          `([definer ,#'match-$name-define]
-                           [letter ,#'match-$name-let]
-                           [ids ,(syntax->datum #'(x ...))]
-                           [let-only #f]
-                           [nested-definers ,#'()]
-                           [nested-idss ,null])
+                           [letter ,#'match-$name-let])
                          #'(void))])))]
     [(_ name)
      #:with $name (format-id #'name "$~a" #'name)
@@ -231,18 +215,14 @@
      #:with match-$name-let (format-id #'here "match-~a-let" #'name)
      #:with ooo (quote-syntax ...)
      #'(begin
-         (define-syntax-rule (match-$name-define (x ooo) e) (match-define (name x ooo) e))
-         (define-syntax-rule (match-$name-let ([(x ooo) e] (... ...)) body (... ...)) 
+         (define-syntax-rule (match-$name-define (_ x ooo) e) (match-define (name x ooo) e))
+         (define-syntax-rule (match-$name-let ([(_ x ooo) e] (... ...)) body (... ...)) 
            (match-let ([(name x ooo) e] (... ...)) body (... ...)))
          (define-syntax ($name stx)
            (syntax-parse stx 
              [(_ x ooo) (add-syntax-properties
                          `([definer ,#'match-$name-define]
-                           [letter ,#'match-$name-let]
-                           [ids ,(syntax->datum #'(x ooo))]
-                           [let-only #f]
-                           [nested-definers ,#'()]
-                           [nested-idss ,null])
+                           [letter ,#'match-$name-let])
                          #'(void))])))]
     ))
 
@@ -254,7 +234,7 @@
   ) ; end begin-for-syntax
 (define-syntax (~struct stx)
   (syntax-parse stx 
-    [(_ id super ... (field:struct-field ...) opt ...)
+    [(_ id:id super:id ... (field:struct-field ...) opt ...)
      #'(begin
          (struct id super ... (field ...) opt ...)
          (define-match-bind (id field.name ...)))]))
@@ -267,16 +247,27 @@
 (define-syntax (~vs stx)
   (syntax-parse stx
     [(_ x:id-or-bind/non-let ...)
-    (add-syntax-properties
-      `([definer ,#'define-values] 
-        [letter ,#'let-values]
-        ;; need to capture ids in unexpanded ctx so just store datums
-        [ids ,(syntax->datum #'(x.name ...))]
+     (add-syntax-properties
+      `([definer ,#'vs-definer] 
+        [letter ,#'vs-letter]
         [let-only #t]
-        [nested-definers ,#'(x.definer ...)]
-        ;; need to capture ids in unexpanded ctx so just store datums
-        [nested-idss ,(syntax->datum #'(x.ids ...))])
+        [names ,#'(x.name ...)])
       #'(void))]))
+(define-syntax vs-definer
+  (lambda (stx)
+    (syntax-parse stx
+      [(def (_ x:id-or-bind/non-let ...) expr)
+       #'(begin
+           (define-values (x.name ...) expr)
+           (~define x x.name) ...
+           )])))
+(define-syntax vs-letter
+  (lambda (stx)
+    (syntax-parse stx
+      [(letter ([(_ x:id-or-bind/non-let ...) expr]) body ...)
+       #'(let-values ([(x.name ...) expr])
+           (~define x x.name) ...
+           body ...)])))
 
 ;; ----------------------------------------------------------------------------
 ;; ~define
@@ -306,31 +297,31 @@
     ;; need this here to avoid conflicting with arg-with-default
     ;; actually, this needs to be first, if I want to allow
     ;; generic binding identifiers
-    (pattern :bind/non-let
+    (pattern (~and arg :bind/non-let)
              #:attr tmp (generate-temporary)
              #:attr new-arg #'(tmp)
-             #:attr def #`((definer ids tmp)))
+             #:attr def #`((definer arg tmp)))
     (pattern name:id 
              #:attr new-arg #'(name)
              #:attr def #'())
-    (pattern [:bind/non-let default] 
+    (pattern [(~and arg :bind/non-let) default] 
              #:attr tmp (generate-temporary)
              #:attr new-arg #'([tmp default])
-             #:attr def #'((definer ids tmp)))
+             #:attr def #'((definer arg tmp)))
     (pattern [name:id default] 
              #:attr new-arg #'([name default])
              #:attr def #'())
-    (pattern (~seq kw:keyword :bind/non-let) 
+    (pattern (~seq kw:keyword (~and arg :bind/non-let))
              #:attr tmp (generate-temporary)
              #:attr new-arg #'(kw tmp)
-             #:attr def #'((definer ids tmp)))
+             #:attr def #'((definer arg tmp)))
     (pattern (~seq kw:keyword name:id) 
              #:attr new-arg #'(kw name)
              #:attr def #'())
-    (pattern (~seq kw:keyword [:bind/non-let default]) 
+    (pattern (~seq kw:keyword [(~and arg :bind/non-let) default]) 
              #:attr tmp (generate-temporary)
              #:attr new-arg #'(kw [tmp default])
-             #:attr def #'((definer ids tmp)))
+             #:attr def #'((definer arg tmp)))
     (pattern (~seq kw:keyword [name:id default]) 
              #:attr new-arg #'(kw [name default])
              #:attr def #'()))
@@ -340,16 +331,15 @@
 (define-syntax (~define stx)
   (syntax-parse stx
     [(_ b:bind body:expr)
-     (quasisyntax/loc stx 
-       (begin (b.definer b.ids body)
-              #,@#'b.nested-defs))]
+     (syntax/loc stx 
+       (b.definer b body))]
     [(_ x:id body:expr) (syntax/loc stx (define x body))]
     [(_ ?header:def-function-header ?body ...)
      (template 
       (define ?header.new-header 
         (?@ . ?header.defs)
         ?body ...))]))
-         
+
 
 ;; ----------------------------------------------------------------------------
 ;; ~lambda
@@ -371,20 +361,6 @@
                     (template 
                      ((?@ . arg0.new-arg) (?@ . arg.new-arg) ... . rest))
              #:attr defs (template ((?@ . arg0.def) (?@ . arg.def) ...))))
-    (define-syntax-class id-or-bind
-    #:auto-nested-attributes
-    (pattern :bind #:attr name (generate-temporary))
-    (pattern x:id #:attr name (generate-temporary)
-                  #:attr definer #'define
-                  #:attr letter #'let
-                  #:attr ids #'x
-                  #:attr nested-defs #'())
-     ;; match values, like in for forms
-    (pattern (x:id ...) #:attr name (generate-temporary) ; shouldnt get used
-                        #:attr definer #'define-values
-                        #:attr letter #'let-values
-                        #:attr ids #'(x ...)
-                        #:attr nested-defs #'()))
 
     ;; ~case-lambda syntax-classes
     (define-syntax-class case-lam-function-header
@@ -407,9 +383,9 @@
     (define-splicing-syntax-class case-lam-fn-arg
       #:auto-nested-attributes
       ;; need this here to avoid conflicting with arg-with-default
-      (pattern :bind/non-let
+      (pattern (~and arg :bind/non-let)
                #:attr new-arg #`(#,(generate-temporary))
-               #:attr def #`((definer ids #,(car (syntax->list #'new-arg)))))
+               #:attr def #`((definer arg #,(car (syntax->list #'new-arg)))))
       (pattern name:id 
                #:attr new-arg #'(name)
                #:attr def #'())
@@ -422,7 +398,7 @@
   (syntax-parse stx
     [(_ b:bind/non-let body:expr ...)
      #:with x (generate-temporary)
-     (syntax/loc stx (lambda (x) (b.definer b.ids x) body ...))]
+     (syntax/loc stx (lambda (x) (b.definer b x) body ...))]
     [(_ rst:id body:expr ...) (syntax/loc stx (lambda rst body ...))]
     [(_ ?header:lam-function-header ?body ...)
      (template 
@@ -458,30 +434,25 @@
      #`(let ()
          (~define (loop x ...) body ...)
          (loop e ...))]
-    [(_ ([x:id-or-bind e] ...) body ...)
-     (with-syntax ([(new-e ...) (map syntax-local-introduce (syntax->list #'(e ...)))])
-       #`(let ()
-           (x.definer x.ids new-e) ...
-           #,@(append-map syntax->list (syntax->list #'(x.nested-defs ...)))
-           body ...))]))
+    [(_ ([x:id-or-bind/let e] ...) body ...)
+     #`(let-values ([x.names e] ...)
+         (x.definer x (values . x.names)) ...
+         body ...)]))
 
 (define-syntax (~let* stx)
   (syntax-parse stx
-    [(_ ([x:id-or-bind e]) body ...) 
-     #`(x.letter ([x.ids e]) 
-         #,@#'x.nested-defs
+    [(_ ([x:id-or-bind/let e]) body ...) 
+     #`(x.letter ([x e]) 
          body ...)]
-    [(_ ([x:id-or-bind e] rst ...) body ...)
-     #`(x.letter ([x.ids e])
-         #,@#'x.nested-defs
+    [(_ ([x:id-or-bind/let e] rst ...) body ...)
+     #`(x.letter ([x e])
          (~let* (rst ...) body ...))]))
 
 (define-syntax (~letrec stx)
   (syntax-parse stx
-    [(_ ([x:id-or-bind e] ...) body ...)
+    [(_ ([x:id-or-bind/let e] ...) body ...)
      #`(let ()
-         (x.definer x.ids e) ...
-         #,@(append-map syntax->list (syntax->list #'(x.nested-defs ...)))
+         (x.definer x e) ...
          body ...)]))
 
 ;; ~for forms -----------------------------------------------------------------
@@ -490,15 +461,16 @@
   (define-splicing-syntax-class for-clause 
     (pattern :seq-binding) (pattern :when-or-break))
   (define-syntax-class for-binder
-    (pattern :bind/let-only #:with xs (generate-temporaries (attribute ids)))
+    (pattern :bind/let-only #:with xs #'names)
     (pattern :bind #:with xs (list (generate-temporary)))
     (pattern x:id #:attr xs #'(x))
     (pattern (x:id ...) #:attr xs #'(x ...)))
   (define-splicing-syntax-class when-or-break 
     (pattern :when-clause) (pattern :break-or-final))
   (define-splicing-syntax-class when-clause
+    #:attributes (test)
     (pattern (~seq #:when guard:expr) #:attr test #'guard)
-    (pattern (~seq #:unless guard:expr) #:attr test #'(not guard)))
+    (pattern (~seq #:unless unless-guard:expr) #:attr test #'(not unless-guard)))
   (define-splicing-syntax-class break-clause (pattern (~seq #:break guard:expr)))
   (define-splicing-syntax-class final-clause (pattern (~seq #:final guard:expr)))
   (define-splicing-syntax-class break-or-final

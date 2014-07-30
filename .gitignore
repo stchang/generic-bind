@@ -1,4 +1,4 @@
-
 *.rkt~
-
 *.scrbl~
+compiled/
+doc/
