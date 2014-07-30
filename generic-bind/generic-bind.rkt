@@ -3,7 +3,8 @@
          syntax/parse/define
          (for-syntax syntax/parse
                      racket/syntax
-                     racket/list)) ; append-map
+                     racket/list ; append-map
+                     racket/format))
 (require (for-syntax syntax/parse/experimental/template))
 (require (for-syntax "stx-utils.rkt"))
 (require racket/unsafe/ops)
@@ -23,7 +24,7 @@
 ;; [o] 2013-08-21: fix error msgs
 ;;                 - named ~let dup id references define
 
-(provide ~vs $: $list $null $stx ; dont export ~m
+(provide ~vs $: $list $null $stx $and $c ; dont export ~m
          ~define ~lambda ~case-lambda ~case-define
          (rename-out [~lambda ~λ] [~lambda ~lam] [~lambda ~l] 
                      [~define ~def] [~define ~d]
@@ -268,6 +269,84 @@
        #'(let-values ([(x.name ...) expr])
            (~define x x.name) ...
            body ...)])))
+
+;; $and
+(define-syntax $and
+  (lambda (stx)
+    (syntax-parse stx
+      [($and x:id-or-bind/non-let ...)
+       (add-syntax-properties
+        `([definer ,#'$and-definer]
+          [letter ,#'$and-letter])
+        #'(void))]
+      [($and x0:id-or-bind/let x:id-or-bind/let ...)
+       (add-syntax-properties
+        `([definer ,#'$and-definer]
+          [letter ,#'$and-letter]
+          [let-only #t]
+          [names ,#'x0.names])
+        #'(void))])))
+(define-syntax $and-definer
+  (lambda (stx)
+    (syntax-parse stx
+      [(def (_) expr)
+       #'(define-values () (begin expr (values)))]
+      [(def (_ x0:id-or-bind/let x:id-or-bind/let ...) expr)
+       #'(begin
+           (define-values x0.names expr)
+           (x0.definer x0 (values . x0.names))
+           (x.definer x (values . x0.names)) ...)])))
+(define-syntax $and-letter
+  (lambda (stx)
+    (syntax-parse stx
+      [(letter ([(_) expr]) body ...+)
+       #'(let () expr body ...)]
+      [(letter ([(_ x0:id-or-bind/let x:id-or-bind/let ...) expr]) body ...+)
+       #'(let-values ([x0.names expr])
+           (x0.definer x0 (values . x0.names))
+           (x.definer x (values . x0.names)) ...
+           body ...)])))
+
+;; $c for contracts
+(define-syntax $c
+  (lambda (stx)
+    (syntax-parse stx #:literals (values)
+      [($c x:id-or-bind/non-let c:expr)
+       (add-syntax-properties
+        `([definer ,#'$c-definer]
+          [letter ,#'$c-letter])
+        #'(void))]
+      [($c x:bind/let-only (values c:expr ...))
+       (add-syntax-properties
+        `([definer ,#'$c-definer]
+          [letter ,#'$c-letter]
+          [let-only #t]
+          [names ,#'x.names])
+        #'(void))])))
+(define-syntax $c-definer
+  (lambda (stx)
+    (syntax-parse stx #:literals (values)
+      [(def (_ x:id c:expr) body:expr)
+       #'(define/contract x c body)]
+      [(def (_ x:id-or-bind/non-let c:expr) body:expr)
+       (with-syntax ([blame-id (syntax->identifier #'x)])
+         #'(x.definer x (with-contract blame-id #:result c body)))]
+      [(def (_ x:bind/let-only (values c:expr ...)) body:expr)
+       (with-syntax ([blame-id (syntax->identifier #'x)])
+         #'(x.definer x (with-contract blame-id #:results (c ...) body)))])))
+(define-syntax $c-letter
+  (lambda (stx)
+    (syntax-parse stx #:literals (values)
+      [(letter ([(_ x:id-or-bind/non-let c:expr) expr:expr]) body ...+)
+       #'(let ([x.name (with-contract x #:result c expr)]) body ...)]
+      [(letter ([(_ x:bind/let-only (values c:expr ...)) expr:expr]) body ...+)
+       #'(let-values ([x.names (with-contract x #:results (c ...) expr)]) body ...)])))
+(begin-for-syntax
+  (define (syntax->identifier stx)
+    (define sym (string->symbol (~s (syntax->datum stx))))
+    (datum->syntax stx sym stx stx))
+  )
+
 
 ;; ----------------------------------------------------------------------------
 ;; ~define

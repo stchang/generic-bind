@@ -29,6 +29,34 @@
 (check-equal? (syntax->datum #'(arg ...)) '(1 2 3))
 (check-equal? (syntax->datum #'([kw . arg] ...)) '([#:a . 1] [#:b . 2] [#:c . 3]))
 
+;; $and
+(~define ($and lst ($ (list lst-0 lst-1))) '(0 1))
+(check-equal? lst '(0 1))
+(check-equal? lst-0 0)
+(check-equal? lst-1 1)
+(~define ($and (~vs ($and lst0 lst_0) lst1) (~vs ($list lst0-0) ($list lst1-0 lst1-1)))
+         (values '(lst0-0) '(lst1-0 lst1-1)))
+(check-equal? lst0 '(lst0-0))
+(check-equal? lst_0 '(lst0-0))
+(check-equal? lst1 '(lst1-0 lst1-1))
+(check-equal? lst0-0 'lst0-0)
+(check-equal? lst1-0 'lst1-0)
+(check-equal? lst1-1 'lst1-1)
+
+;; $c
+(~define ($c x real?) 3.14159)
+(check-equal? x 3.14159)
+(check-exn exn:fail:contract?
+           (λ ()
+             (~define ($c x real?) "not a real number")
+             (void)))
+(~define ($c ($list f0) (list/c (-> real? real?)))
+         (list (λ (x) x)))
+(check-equal? (f0 3.14159) 3.14159)
+(check-exn exn:fail:contract?
+           (λ ()
+             (f0 "not a real number")))
+
 ;; define fns
 (~define (f1 x [y 10] #:z [z 0]) (+ x y z))
 (check-equal? (f1 100) 110)
