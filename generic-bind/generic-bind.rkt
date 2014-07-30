@@ -4,7 +4,6 @@
          (for-syntax syntax/parse
                      racket/syntax
                      racket/list ; append-map
-                     rackjure/threading
                      racket/format))
 (require (for-syntax syntax/parse/experimental/template))
 (require (for-syntax "stx-utils.rkt"))
@@ -344,7 +343,7 @@
        #'(let-values ([x.names (with-contract x #:results (c ...) expr)]) body ...)])))
 (begin-for-syntax
   (define (syntax->identifier stx)
-    (define sym (~> stx syntax->datum ~s string->symbol))
+    (define sym (string->symbol (~s (syntax->datum stx))))
     (datum->syntax stx sym stx stx))
   )
 
