@@ -15,7 +15,8 @@ The hope is that the forms in this library can be used in place of their analogo
 @(define the-eval (make-base-eval))
 @(the-eval '(require generic-bind racket/match syntax/parse))
 
-@author[@author+email["Stephen Chang" "stchang@racket-lang.org"]]
+@author[@author+email["Stephen Chang" "stchang@racket-lang.org" #:obfuscate? #t]
+        @author+email["Alexander Knauth" "alexander@knauth.org" #:obfuscate? #t]]
 
 @; Generic Binding Instances --------------------------------------------------
 @section{Generic Binding Instances}
