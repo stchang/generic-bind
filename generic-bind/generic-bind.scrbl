@@ -179,6 +179,13 @@ Argument-with-default and keyword binding positions support generic bindings too
                                                                    
 @defform[(~def ...)]{ Same as @racket[~define].}
 @defform[(~d ...)]{ Same as @racket[~define].}
+
+@defform*/subs[((~define/contract b contract-expr body)
+                (~define/contract (f db ...) contract-expr body ...))
+               ([b generic-binding identifier?]
+                [db define-allowable-generic-binding identifier?])]{
+like @racket[define/contract], except allowing generic binding instances like @racket[~define].
+}
                                          
 @defform*/subs[((~lambda db body ...)
                 (~lambda (db ...) body ...))

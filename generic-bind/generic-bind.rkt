@@ -25,7 +25,7 @@
 ;;                 - named ~let dup id references define
 
 (provide ~vs $: $list $null $stx $and $c ; dont export ~m
-         ~define ~lambda ~case-lambda ~case-define
+         ~define ~lambda ~case-lambda ~case-define ~define/contract
          (rename-out [~lambda ~λ] [~lambda ~lam] [~lambda ~l] 
                      [~define ~def] [~define ~d]
                      [~m $] [~vs ⋈]
@@ -418,6 +418,21 @@
       (define ?header.new-header 
         (?@ . ?header.defs)
         ?body ...))]))
+
+(define-syntax ~define/contract
+  (lambda (stx)
+    (syntax-parse stx
+      [(_ b:bind c:expr body:expr)
+       (syntax/loc stx 
+         (~define ($c b c) body))]
+      [(_ x:id c:expr body:expr)
+       (syntax/loc stx
+         (define/contract x c body))]
+      [(_ ?header:def-function-header c:expr ?body ...)
+       (template 
+        (define/contract ?header.new-header c
+          (?@ . ?header.defs)
+          ?body ...))])))
 
 
 ;; ----------------------------------------------------------------------------

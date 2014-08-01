@@ -44,18 +44,38 @@
 (check-equal? lst1-1 'lst1-1)
 
 ;; $c
-(~define ($c x real?) 3.14159)
-(check-equal? x 3.14159)
-(check-exn exn:fail:contract?
-           (λ ()
-             (~define ($c x real?) "not a real number")
-             (void)))
-(~define ($c ($list f0) (list/c (-> real? real?)))
-         (list (λ (x) x)))
-(check-equal? (f0 3.14159) 3.14159)
-(check-exn exn:fail:contract?
-           (λ ()
-             (f0 "not a real number")))
+(test-case "$c"
+  (~define ($c x real?) 3.14159)
+  (check-equal? x 3.14159)
+  (check-exn exn:fail:contract?
+             (λ ()
+               (~define ($c x real?) "not a real number")
+               (void)))
+  (~define ($c ($list f0) (list/c (-> real? real?)))
+           (list (λ (x) x)))
+  (check-equal? (f0 3.14159) 3.14159)
+  (check-exn exn:fail:contract?
+             (λ ()
+               (f0 "not a real number"))))
+(test-case "~define/contract"
+  (~define/contract x real? 3.14159)
+  (check-equal? x 3.14159)
+  (check-exn exn:fail:contract?
+             (λ ()
+               (~define/contract x real? "not a real number")
+               (void)))
+  (~define/contract (f x) (-> real? real?)
+                    x)
+  (check-equal? (f 3.14159) 3.14159)
+  (check-exn exn:fail:contract?
+             (λ ()
+               (f "not a real number")))
+  (~define/contract ($list f0) (list/c (-> real? real?))
+                    (list (λ (x) x)))
+  (check-equal? (f0 3.14159) 3.14159)
+  (check-exn exn:fail:contract?
+             (λ ()
+               (f0 "not a real number"))))
 
 ;; define fns
 (~define (f1 x [y 10] #:z [z 0]) (+ x y z))
