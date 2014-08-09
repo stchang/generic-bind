@@ -3,6 +3,7 @@
          syntax/parse/define
          racket/unsafe/ops
          "syntax-parse-utils.rkt"
+         "nested-binds-helper.rkt"
          (for-syntax syntax/parse
                      racket/syntax
                      racket/list ; append-map
@@ -114,21 +115,53 @@
   ) ;; end begin-for-syntax
 
 ;; ----------------------------------------------------------------------------
+;; define-syntax/parse/gen-bind
+
+(define-for-syntax make-gen-bind-match-expander-proc
+  (make-gen-bind-match-expander-proc-maker #'~define))
+
+(define-syntax/parse define-syntax/gen-bind
+  [(define-syntax/gen-bind id:id parser-proc-expr:expr)
+   #'(define-match-expander id
+       (make-gen-bind-match-expander-proc)
+       parser-proc-expr)])
+
+(define-syntax/parse define-syntax/parse/gen-bind
+  [(define-syntax/parse/gen-bind id:id #:stx stx:id option-or-clause ...)
+   #'(define-syntax/gen-bind id
+       (lambda (stx)
+         (syntax-parse stx option-or-clause ...)))]
+  [(define-synatx/parse/gen-bind id:id option-or-clause ...)
+   #'(define-syntax/parse/gen-bind id #:stx stx option-or-clause ...)])
+
+;; ----------------------------------------------------------------------------
 ;; generic bind "instances"
 
 ;; match generic bind instance 
-;; TODO: currently does not support nested generic binds
-
-(define-syntax/parse ~m
+(define-syntax/parse/gen-bind ~m
   [(_ pat) (add-bind-properties #'$-definer #'$-letter #'(void))])
 
 (define-simple-macro ($-definer ($ pat) expr)
-   (match-define pat expr))
+   (~match-define pat expr))
 
 (define-simple-macro ($-letter ([($ pat) expr]) body ...+)
-   (match-let ([pat expr]) body ...))
+   (~match-let ([pat expr]) body ...))
 
-(define-syntax/parse $stx
+(define-syntax/parse ~match-define #:stx stx
+  [(match-def pat:expr expr:expr)
+   (quasisyntax/loc stx
+     (splicing-with-new-match-pat-def-set
+      #,(syntax/loc stx (match-define pat expr))
+      (define-current-match-pat-def-set)))])
+
+(define-syntax/parse ~match-let #:stx stx
+  [(_ stuff body ...+)
+   #'(with-new-match-pat-def-set
+      (match-let stuff
+        (define-current-match-pat-def-set)
+        body ...))])
+
+(define-syntax/parse/gen-bind $stx
   [(_ pat pat-dir ...)
    (add-bind-properties #'$stx-definer #'$stx-letter #'(void))])
 
@@ -143,26 +176,26 @@
 ;; generic match bindings where the outer form is a list or cons
 ;; ie, just match list or match cons
 (define-simple-macro (match-listrest-define (_ x ... (~datum :) rst) e)
-  (match-define (list-rest x ... rst) e))
+  (~match-define (list-rest x ... rst) e))
 (define-simple-macro (match-listrest-let ([(_ x ... (~datum :) rst) e] ...) body ...) 
-  (match-let ([(list-rest x ... rst) e] ...) body ...))
+  (~match-let ([(list-rest x ... rst) e] ...) body ...))
 (define-syntax-rule (match-list-define (_ x ...) e)
-  (match-define (list x ...) e))
+  (~match-define (list x ...) e))
 (define-syntax-rule (match-list-let ([(_ x ...) e] ...) body ...) 
-  (match-let ([(list x ...) e] ...) body ...))
-(define-syntax/parse $list #:datum-literals (:)
+  (~match-let ([(list x ...) e] ...) body ...))
+(define-syntax/parse/gen-bind $list #:datum-literals (:)
   [(_ x ... : rst) (add-bind-properties #'match-listrest-define #'match-listrest-let #'(void))]
   [(_ x ...) (add-bind-properties #'match-list-define #'match-list-let #'(void))])
-(define-syntax-rule (match-cons-define (_ x xs) e) (match-define (cons x xs) e))
+(define-syntax-rule (match-cons-define (_ x xs) e) (~match-define (cons x xs) e))
 (define-syntax-rule (match-cons-let ([(_ x xs) e] ...) body ...) 
-  (match-let ([(cons x xs) e] ...) body ...))
-(define-syntax/parse $:
+  (~match-let ([(cons x xs) e] ...) body ...))
+(define-syntax/parse/gen-bind $:
   [(_ x xs) (add-bind-properties #'match-cons-define #'match-cons-let #'(void))])
 (define-syntax-rule (match-null-define _ e) ; ignore args
-  (match-define '() e))
+  (~match-define '() e))
 (define-syntax-rule (match-null-let ([_ e] ...) body ...) 
-  (match-let (['() e] ...) body ...))
-(define-syntax/parse $null
+  (~match-let (['() e] ...) body ...))
+(define-syntax/parse/gen-bind $null
   [_ (add-bind-properties #'match-null-define #'match-null-let #'(void))])
 
 (define-syntax/parse define-match-bind
@@ -171,10 +204,10 @@
    #:with match-$name-define (format-id #'here "match-~a-define" #'name)
    #:with match-$name-let (format-id #'here "match-~a-let" #'name)
    #'(begin
-       (define-syntax-rule (match-$name-define (_ x ...) e) (match-define (name x ...) e))
+       (define-syntax-rule (match-$name-define (_ x ...) e) (~match-define (name x ...) e))
        (define-syntax-rule (match-$name-let ([(_ x ...) e] (... ...)) body (... ...)) 
-         (match-let ([(name x ...) e] (... ...)) body (... ...)))
-       (define-syntax/parse $name
+         (~match-let ([(name x ...) e] (... ...)) body (... ...)))
+       (define-syntax/parse/gen-bind $name
          [(_ x ...) (add-bind-properties #'match-$name-define #'match-$name-let #'(void))]))]
   [(_ name)
    #:with $name (format-id #'name "$~a" #'name)
@@ -182,10 +215,10 @@
    #:with match-$name-let (format-id #'here "match-~a-let" #'name)
    #:with ooo (quote-syntax ...)
    #'(begin
-       (define-syntax-rule (match-$name-define (_ x ooo) e) (match-define (name x ooo) e))
+       (define-syntax-rule (match-$name-define (_ x ooo) e) (~match-define (name x ooo) e))
        (define-syntax-rule (match-$name-let ([(_ x ooo) e] (... ...)) body (... ...)) 
-         (match-let ([(name x ooo) e] (... ...)) body (... ...)))
-       (define-syntax/parse $name
+         (~match-let ([(name x ooo) e] (... ...)) body (... ...)))
+       (define-syntax/parse/gen-bind $name
          [(_ x ooo) (add-bind-properties #'match-$name-define #'match-$name-let #'(void))]))]
   )
 
@@ -206,7 +239,7 @@
 ;; - supports (one-level only) nested (non-let-restricted) generic binds
 ;;   (currently this is only the generic bind instance for match)
 ;;   (to support artitrary nesting, need to get the nested-defs of each x:v-bind)
-(define-syntax/parse ~vs
+(define-syntax/parse/gen-bind ~vs
   [(_ x:id-or-bind/non-let ...)
    (add-bind-properties #'vs-definer #'vs-letter #t #'(x.name ...) #'(void))])
 (define-simple-macro (vs-definer (_ x:id-or-bind/non-let ...) expr)
@@ -219,7 +252,7 @@
     body ...))
 
 ;; $and
-(define-syntax/parse $and
+(define-syntax/parse/gen-bind $and
   [($and x:id-or-bind/non-let ...)
    (add-bind-properties #'$and-definer #'$and-letter #'(void))]
   [($and x0:id-or-bind/let x:id-or-bind/let ...)
@@ -242,7 +275,7 @@
        body ...)])
 
 ;; $c for contracts
-(define-syntax/parse $c #:literals (values)
+(define-syntax/parse/gen-bind $c #:literals (values)
   [($c x:id-or-bind/non-let c:expr)
    (add-bind-properties #'$c-definer #'$c-letter #'(void))]
   [($c x:bind/let-only (values c:expr ...))
