@@ -1,15 +1,16 @@
 #lang racket
 (require syntax/parse
          syntax/parse/define
+         racket/unsafe/ops
+         "syntax-parse-utils.rkt"
          (for-syntax syntax/parse
                      racket/syntax
                      racket/list ; append-map
-                     racket/format))
-(require (for-syntax syntax/parse/experimental/template))
-(require (for-syntax "stx-utils.rkt"))
-(require racket/unsafe/ops)
-(require (for-syntax (only-in syntax/unsafe/for-transform expand-for-clause)))
-(require (for-syntax syntax/for-body))
+                     racket/format
+                     syntax/parse/experimental/template
+                     "stx-utils.rkt"
+                     (only-in syntax/unsafe/for-transform expand-for-clause)
+                     syntax/for-body))
 
 ;; TODO:
 ;; [x] 2013-08-26: ~let doesn't support ~vs DONE: 2013-08-26
@@ -112,47 +113,32 @@
              ))
   ) ;; end begin-for-syntax
 
-
 ;; ----------------------------------------------------------------------------
 ;; generic bind "instances"
 
 ;; match generic bind instance 
 ;; TODO: currently does not support nested generic binds
-(define-syntax (~m stx)
-  (syntax-parse stx
-    [(_ pat) (add-syntax-properties
-              `([definer ,#'$-definer]
-                [letter ,#'$-letter])
-              #'(void))]))
-(define-syntax $-definer
-  (lambda (stx)
-    (syntax-parse stx
-      [(def ($ pat) expr)
-       #'(match-define pat expr)])))
-(define-syntax $-letter
-  (lambda (stx)
-    (syntax-parse stx
-      [(letter ([($ pat) expr]) body ...+)
-       #'(match-let ([pat expr]) body ...)])))
 
-(define-syntax ($stx stx)
-  (syntax-parse stx
-    [(_ pat pat-dir ...)
-     (add-syntax-properties
-      `([definer ,#'$stx-definer]
-        [letter ,#'$stx-letter])
-      #'(void))]))
+(define-syntax/parse ~m
+  [(_ pat) (add-bind-properties #'$-definer #'$-letter #'(void))])
 
-(define-syntax $stx-definer
-  (syntax-parser
-    [(definer ($stx pat pat-dir ...) stx)
-     #'(define/syntax-parse pat pat-dir ... stx)]))
-(define-syntax $stx-letter
-  (syntax-parser
-    [(letter ([($stx pat pat-dir ...) stx] ...) body ...)
-     #'(syntax-parse (stx ...)
-         [(pat ...) pat-dir ... ... body ...])]))
-     
+(define-simple-macro ($-definer ($ pat) expr)
+   (match-define pat expr))
+
+(define-simple-macro ($-letter ([($ pat) expr]) body ...+)
+   (match-let ([pat expr]) body ...))
+
+(define-syntax/parse $stx
+  [(_ pat pat-dir ...)
+   (add-bind-properties #'$stx-definer #'$stx-letter #'(void))])
+
+(define-simple-macro ($stx-definer ($stx pat pat-dir ...) stx)
+   (define/syntax-parse pat pat-dir ... stx))
+
+(define-simple-macro ($stx-letter ([($stx pat pat-dir ...) stx] ...) body ...)
+  (syntax-parse (stx ...)
+    [(pat ...) pat-dir ... ... body ...]))
+
 
 ;; generic match bindings where the outer form is a list or cons
 ;; ie, just match list or match cons
@@ -164,68 +150,46 @@
   (match-define (list x ...) e))
 (define-syntax-rule (match-list-let ([(_ x ...) e] ...) body ...) 
   (match-let ([(list x ...) e] ...) body ...))
-(define-syntax ($list stx)
-  (syntax-parse stx #:datum-literals (:)
-    [(_ x ... : rst) (add-syntax-properties
-                      `([definer ,#'match-listrest-define]
-                        [letter ,#'match-listrest-let])
-                      #'(void))]
-    [(_ x ...) (add-syntax-properties
-                `([definer ,#'match-list-define]
-                  [letter ,#'match-list-let])
-                #'(void))]))
+(define-syntax/parse $list #:datum-literals (:)
+  [(_ x ... : rst) (add-bind-properties #'match-listrest-define #'match-listrest-let #'(void))]
+  [(_ x ...) (add-bind-properties #'match-list-define #'match-list-let #'(void))])
 (define-syntax-rule (match-cons-define (_ x xs) e) (match-define (cons x xs) e))
 (define-syntax-rule (match-cons-let ([(_ x xs) e] ...) body ...) 
   (match-let ([(cons x xs) e] ...) body ...))
-(define-syntax ($: stx)
-  (syntax-parse stx 
-    [(_ x xs) (add-syntax-properties
-               `([definer ,#'match-cons-define]
-                 [letter ,#'match-cons-let])
-               #'(void))]))
+(define-syntax/parse $:
+  [(_ x xs) (add-bind-properties #'match-cons-define #'match-cons-let #'(void))])
 (define-syntax-rule (match-null-define _ e) ; ignore args
   (match-define '() e))
 (define-syntax-rule (match-null-let ([_ e] ...) body ...) 
   (match-let (['() e] ...) body ...))
-(define-syntax ($null stx)
-  (syntax-case stx ()
-    [_ (add-syntax-properties
-        `([definer ,#'match-null-define]
-          [letter ,#'match-null-let])
-        #'(void))]))
+(define-syntax/parse $null
+  [_ (add-bind-properties #'match-null-define #'match-null-let #'(void))])
 
-(define-syntax (define-match-bind stx)
-  (syntax-parse stx
-    [(_ (name x ...))
-     #:with $name (format-id #'name "$~a" #'name)
-     #:with match-$name-define (format-id #'here "match-~a-define" #'name)
-     #:with match-$name-let (format-id #'here "match-~a-let" #'name)
-     #'(begin
-         (define-syntax-rule (match-$name-define (_ x ...) e) (match-define (name x ...) e))
-         (define-syntax-rule (match-$name-let ([(_ x ...) e] (... ...)) body (... ...)) 
-           (match-let ([(name x ...) e] (... ...)) body (... ...)))
-         (define-syntax ($name stx)
-           (syntax-parse stx 
-             [(_ x ...) (add-syntax-properties
-                         `([definer ,#'match-$name-define]
-                           [letter ,#'match-$name-let])
-                         #'(void))])))]
-    [(_ name)
-     #:with $name (format-id #'name "$~a" #'name)
-     #:with match-$name-define (format-id #'here "match-~a-define" #'name)
-     #:with match-$name-let (format-id #'here "match-~a-let" #'name)
-     #:with ooo (quote-syntax ...)
-     #'(begin
-         (define-syntax-rule (match-$name-define (_ x ooo) e) (match-define (name x ooo) e))
-         (define-syntax-rule (match-$name-let ([(_ x ooo) e] (... ...)) body (... ...)) 
-           (match-let ([(name x ooo) e] (... ...)) body (... ...)))
-         (define-syntax ($name stx)
-           (syntax-parse stx 
-             [(_ x ooo) (add-syntax-properties
-                         `([definer ,#'match-$name-define]
-                           [letter ,#'match-$name-let])
-                         #'(void))])))]
-    ))
+(define-syntax/parse define-match-bind
+  [(_ (name x ...))
+   #:with $name (format-id #'name "$~a" #'name)
+   #:with match-$name-define (format-id #'here "match-~a-define" #'name)
+   #:with match-$name-let (format-id #'here "match-~a-let" #'name)
+   #'(begin
+       (define-syntax-rule (match-$name-define (_ x ...) e) (match-define (name x ...) e))
+       (define-syntax-rule (match-$name-let ([(_ x ...) e] (... ...)) body (... ...)) 
+         (match-let ([(name x ...) e] (... ...)) body (... ...)))
+       (define-syntax ($name stx)
+         (syntax-parse stx 
+           [(_ x ...) (add-bind-properties #'match-$name-define #'match-$name-let #'(void))])))]
+  [(_ name)
+   #:with $name (format-id #'name "$~a" #'name)
+   #:with match-$name-define (format-id #'here "match-~a-define" #'name)
+   #:with match-$name-let (format-id #'here "match-~a-let" #'name)
+   #:with ooo (quote-syntax ...)
+   #'(begin
+       (define-syntax-rule (match-$name-define (_ x ooo) e) (match-define (name x ooo) e))
+       (define-syntax-rule (match-$name-let ([(_ x ooo) e] (... ...)) body (... ...)) 
+         (match-let ([(name x ooo) e] (... ...)) body (... ...)))
+       (define-syntax ($name stx)
+         (syntax-parse stx 
+           [(_ x ooo) (add-bind-properties #'match-$name-define #'match-$name-let #'(void))])))]
+  )
 
 
 (begin-for-syntax ;; ~struct syntax classes
@@ -233,119 +197,75 @@
     (pattern field:id #:attr name #'field)
     (pattern [field:id opt ...] #:attr name #'field))
   ) ; end begin-for-syntax
-(define-syntax (~struct stx)
-  (syntax-parse stx 
-    [(_ id:id super:id ... (field:struct-field ...) opt ...)
-     #'(begin
-         (struct id super ... (field ...) opt ...)
-         (define-match-bind (id field.name ...)))]))
-  
+(define-syntax/parse ~struct
+  [(_ id:id super:id ... (field:struct-field ...) opt ...)
+   #'(begin
+       (struct id super ... (field ...) opt ...)
+       (define-match-bind (id field.name ...)))])
+
 
 ;; values generic bind instance
 ;; - supports (one-level only) nested (non-let-restricted) generic binds
 ;;   (currently this is only the generic bind instance for match)
 ;;   (to support artitrary nesting, need to get the nested-defs of each x:v-bind)
-(define-syntax (~vs stx)
-  (syntax-parse stx
-    [(_ x:id-or-bind/non-let ...)
-     (add-syntax-properties
-      `([definer ,#'vs-definer] 
-        [letter ,#'vs-letter]
-        [let-only #t]
-        [names ,#'(x.name ...)])
-      #'(void))]))
-(define-syntax vs-definer
-  (lambda (stx)
-    (syntax-parse stx
-      [(def (_ x:id-or-bind/non-let ...) expr)
-       #'(begin
-           (define-values (x.name ...) expr)
-           (~define x x.name) ...
-           )])))
-(define-syntax vs-letter
-  (lambda (stx)
-    (syntax-parse stx
-      [(letter ([(_ x:id-or-bind/non-let ...) expr]) body ...)
-       #'(let-values ([(x.name ...) expr])
-           (~define x x.name) ...
-           body ...)])))
+(define-syntax/parse ~vs
+  [(_ x:id-or-bind/non-let ...)
+   (add-bind-properties #'vs-definer #'vs-letter #t #'(x.name ...) #'(void))])
+(define-simple-macro (vs-definer (_ x:id-or-bind/non-let ...) expr)
+  (begin
+    (define-values (x.name ...) expr)
+    (~define x x.name) ...))
+(define-simple-macro (vs-letter ([(_ x:id-or-bind/non-let ...) expr]) body ...)
+  (let-values ([(x.name ...) expr])
+    (~define x x.name) ...
+    body ...))
 
 ;; $and
-(define-syntax $and
-  (lambda (stx)
-    (syntax-parse stx
-      [($and x:id-or-bind/non-let ...)
-       (add-syntax-properties
-        `([definer ,#'$and-definer]
-          [letter ,#'$and-letter])
-        #'(void))]
-      [($and x0:id-or-bind/let x:id-or-bind/let ...)
-       (add-syntax-properties
-        `([definer ,#'$and-definer]
-          [letter ,#'$and-letter]
-          [let-only #t]
-          [names ,#'x0.names])
-        #'(void))])))
-(define-syntax $and-definer
-  (lambda (stx)
-    (syntax-parse stx
-      [(def (_) expr)
-       #'(define-values () (begin expr (values)))]
-      [(def (_ x0:id-or-bind/let x:id-or-bind/let ...) expr)
-       #'(begin
-           (define-values x0.names expr)
-           (x0.definer x0 (values . x0.names))
-           (x.definer x (values . x0.names)) ...)])))
-(define-syntax $and-letter
-  (lambda (stx)
-    (syntax-parse stx
-      [(letter ([(_) expr]) body ...+)
-       #'(let () expr body ...)]
-      [(letter ([(_ x0:id-or-bind/let x:id-or-bind/let ...) expr]) body ...+)
-       #'(let-values ([x0.names expr])
-           (x0.definer x0 (values . x0.names))
-           (x.definer x (values . x0.names)) ...
-           body ...)])))
+(define-syntax/parse $and
+  [($and x:id-or-bind/non-let ...)
+   (add-bind-properties #'$and-definer #'$and-letter #'(void))]
+  [($and x0:id-or-bind/let x:id-or-bind/let ...)
+   (add-bind-properties #'$and-definer #'$and-letter #t #'x0.names #'(void))])
+(define-syntax/parse $and-definer
+  [(def (_) expr)
+   #'(define-values () (begin expr (values)))]
+  [(def (_ x0:id-or-bind/let x:id-or-bind/let ...) expr)
+   #'(begin
+       (define-values x0.names expr)
+       (x0.definer x0 (values . x0.names))
+       (x.definer x (values . x0.names)) ...)])
+(define-syntax/parse $and-letter
+  [(letter ([(_) expr]) body ...+)
+   #'(let () expr body ...)]
+  [(letter ([(_ x0:id-or-bind/let x:id-or-bind/let ...) expr]) body ...+)
+   #'(let-values ([x0.names expr])
+       (x0.definer x0 (values . x0.names))
+       (x.definer x (values . x0.names)) ...
+       body ...)])
 
 ;; $c for contracts
-(define-syntax $c
-  (lambda (stx)
-    (syntax-parse stx #:literals (values)
-      [($c x:id-or-bind/non-let c:expr)
-       (add-syntax-properties
-        `([definer ,#'$c-definer]
-          [letter ,#'$c-letter])
-        #'(void))]
-      [($c x:bind/let-only (values c:expr ...))
-       (add-syntax-properties
-        `([definer ,#'$c-definer]
-          [letter ,#'$c-letter]
-          [let-only #t]
-          [names ,#'x.names])
-        #'(void))])))
-(define-syntax $c-definer
-  (lambda (stx)
-    (syntax-parse stx #:literals (values)
-      [(def (_ x:id c:expr) body:expr)
-       #'(define/contract x c body)]
-      [(def (_ x:id-or-bind/non-let c:expr) body:expr)
-       (with-syntax ([blame-id (syntax->identifier #'x)])
-         #'(x.definer x (with-contract blame-id #:result c body)))]
-      [(def (_ x:bind/let-only (values c:expr ...)) body:expr)
-       (with-syntax ([blame-id (syntax->identifier #'x)])
-         #'(x.definer x (with-contract blame-id #:results (c ...) body)))])))
-(define-syntax $c-letter
-  (lambda (stx)
-    (syntax-parse stx #:literals (values)
-      [(letter ([(_ x:id-or-bind/non-let c:expr) expr:expr]) body ...+)
-       #'(let ([x.name (with-contract x #:result c expr)]) body ...)]
-      [(letter ([(_ x:bind/let-only (values c:expr ...)) expr:expr]) body ...+)
-       #'(let-values ([x.names (with-contract x #:results (c ...) expr)]) body ...)])))
-(begin-for-syntax
-  (define (syntax->identifier stx)
-    (define sym (string->symbol (~s (syntax->datum stx))))
-    (datum->syntax stx sym stx stx))
-  )
+(define-syntax/parse $c #:literals (values)
+  [($c x:id-or-bind/non-let c:expr)
+   (add-bind-properties #'$c-definer #'$c-letter #'(void))]
+  [($c x:bind/let-only (values c:expr ...))
+   (add-bind-properties #'$c-definer #'$c-letter #t #'x.names #'(void))])
+(define-syntax/parse $c-definer #:literals (values)
+  [(def (_ x:id c:expr) body:expr)
+   #'(define/contract x c body)]
+  [(def (_ x:id-or-bind/non-let c:expr) body:expr)
+   (with-syntax ([blame-id (syntax->identifier #'x)])
+     #'(x.definer x (with-contract blame-id #:result c body)))]
+  [(def (_ x:bind/let-only (values c:expr ...)) body:expr)
+   (with-syntax ([blame-id (syntax->identifier #'x)])
+     #'(x.definer x (with-contract blame-id #:results (c ...) body)))])
+(define-syntax/parse $c-letter #:literals (values)
+  [(letter ([(_ x:id-or-bind/non-let c:expr) expr:expr]) body ...+)
+   #'(let ([x.name (with-contract x #:result c expr)]) body ...)]
+  [(letter ([(_ x:bind/let-only (values c:expr ...)) expr:expr]) body ...+)
+   #'(let-values ([x.names (with-contract x #:results (c ...) expr)]) body ...)])
+(define-for-syntax (syntax->identifier stx)
+  (define sym (string->symbol (~s (syntax->datum stx))))
+  (datum->syntax stx sym stx stx))
 
 
 ;; ----------------------------------------------------------------------------
@@ -407,32 +327,29 @@
     ) ;; end begin-for-syntax
 
 ;; ~define --------------------------------------------------------------------
-(define-syntax (~define stx)
-  (syntax-parse stx
-    [(_ b:bind body:expr)
-     (syntax/loc stx 
-       (b.definer b body))]
-    [(_ x:id body:expr) (syntax/loc stx (define x body))]
-    [(_ ?header:def-function-header ?body ...)
-     (template 
-      (define ?header.new-header 
-        (?@ . ?header.defs)
-        ?body ...))]))
+(define-syntax/parse ~define #:stx stx
+  [(_ b:bind body:expr)
+   (syntax/loc stx 
+     (b.definer b body))]
+  [(_ x:id body:expr) (syntax/loc stx (define x body))]
+  [(_ ?header:def-function-header ?body ...)
+   (template 
+    (define ?header.new-header 
+      (?@ . ?header.defs)
+      ?body ...))])
 
-(define-syntax ~define/contract
-  (lambda (stx)
-    (syntax-parse stx
-      [(_ b:bind c:expr body:expr)
-       (syntax/loc stx 
-         (~define ($c b c) body))]
-      [(_ x:id c:expr body:expr)
-       (syntax/loc stx
-         (define/contract x c body))]
-      [(_ ?header:def-function-header c:expr ?body ...)
-       (template 
-        (define/contract ?header.new-header c
-          (?@ . ?header.defs)
-          ?body ...))])))
+(define-syntax/parse ~define/contract #:stx stx
+  [(_ b:bind c:expr body:expr)
+   (syntax/loc stx 
+     (~define ($c b c) body))]
+  [(_ x:id c:expr body:expr)
+   (syntax/loc stx
+     (define/contract x c body))]
+  [(_ ?header:def-function-header c:expr ?body ...)
+   (template 
+    (define/contract ?header.new-header c
+      (?@ . ?header.defs)
+      ?body ...))])
 
 
 ;; ----------------------------------------------------------------------------
@@ -488,66 +405,58 @@
                #:attr def #'()))
   ) ; end define-for-syntax
 
-(define-syntax (~lambda stx)
-  (syntax-parse stx
-    [(_ b:bind/non-let body:expr ...)
-     #:with x (generate-temporary)
-     (syntax/loc stx (lambda (x) (b.definer b x) body ...))]
-    [(_ rst:id body:expr ...) (syntax/loc stx (lambda rst body ...))]
-    [(_ ?header:lam-function-header ?body ...)
-     (template 
-      (lambda ?header.new-header 
-        (?@ . ?header.defs)
-        ?body ...))]))
+(define-syntax/parse ~lambda #:stx stx
+  [(_ b:bind/non-let body:expr ...)
+   (syntax/loc stx (lambda (x) (b.definer b x) body ...))]
+  [(_ rst:id body:expr ...) (syntax/loc stx (lambda rst body ...))]
+  [(_ ?header:lam-function-header ?body ...)
+   (template 
+    (lambda ?header.new-header 
+      (?@ . ?header.defs)
+      ?body ...))])
 
-(define-syntax (~case-lambda stx)
-  (syntax-parse stx
-    [(_ [?header:case-lam-function-header ?body ...] ...)
-     #:with (fn ...) (generate-temporaries #'(?header ...))
-     #:with args (generate-temporary)
-     #:with new-body 
-       (let loop ([fns (syntax->list #'(fn ...))])
-         (if (null? (cdr fns))
-             #`(apply #,(car fns) args)
-             #`(with-handlers ([exn:misc:match? (λ _ #,(loop (cdr fns)))])
-                 (apply #,(car fns) args))))
-     #'(let ([fn (~lambda ?header ?body ...)] ...) (λ args new-body))]))
+(define-syntax/parse ~case-lambda
+  [(_ [?header:case-lam-function-header ?body ...] ...)
+   #:with (fn ...) (generate-temporaries #'(?header ...))
+   #:with new-body 
+   (let loop ([fns (syntax->list #'(fn ...))])
+     (if (null? (cdr fns))
+         #`(apply #,(car fns) args)
+         #`(with-handlers ([exn:misc:match? (λ _ #,(loop (cdr fns)))])
+             (apply #,(car fns) args))))
+   #'(let ([fn (~lambda ?header ?body ...)] ...) (λ args new-body))])
 
-(define-syntax (~case-define stx)
-  (syntax-parse stx #:datum-literals (→)
-    [(_ f (x ... → body ...) ...)
-     #'(define f (~case-lambda [(x ...) body ...] ...))]
-    [(_ f clause ...) #'(define f (~case-lambda clause ...))]))
-  
+(define-syntax/parse ~case-define #:datum-literals (→)
+  [(_ f (x ... → body ...) ...)
+   #'(define f (~case-lambda [(x ...) body ...] ...))]
+  [(_ f clause ...) #'(define f (~case-lambda clause ...))])
+
 ;; ~let -----------------------------------------------------------------------
-(define-syntax (~let stx)
-  (syntax-parse stx
-    ;; only non-let generic binds are allowed in named let
-    ;; (same as other fn def forms)
-    [(_ loop:id ([x:id-or-bind/non-let e] ...) body ...)
-     #`(let ()
-         (~define (loop x ...) body ...)
-         (loop e ...))]
-    [(_ ([x:id-or-bind/let e] ...) body ...)
-     #`(let-values ([x.names e] ...)
-         (x.definer x (values . x.names)) ...
-         body ...)]))
+(define-syntax/parse ~let
+  ;; only non-let generic binds are allowed in named let
+  ;; (same as other fn def forms)
+  [(_ loop:id ([x:id-or-bind/non-let e] ...) body ...)
+   #`(let ()
+       (~define (loop x ...) body ...)
+       (loop e ...))]
+  [(_ ([x:id-or-bind/let e] ...) body ...)
+   #`(let-values ([x.names e] ...)
+       (x.definer x (values . x.names)) ...
+       body ...)])
 
-(define-syntax (~let* stx)
-  (syntax-parse stx
-    [(_ ([x:id-or-bind/let e]) body ...) 
-     #`(x.letter ([x e]) 
-         body ...)]
-    [(_ ([x:id-or-bind/let e] rst ...) body ...)
-     #`(x.letter ([x e])
-         (~let* (rst ...) body ...))]))
+(define-syntax/parse ~let*
+  [(_ ([x:id-or-bind/let e]) body ...) 
+   #`(x.letter ([x e]) 
+               body ...)]
+  [(_ ([x:id-or-bind/let e] rst ...) body ...)
+   #`(x.letter ([x e])
+               (~let* (rst ...) body ...))])
 
-(define-syntax (~letrec stx)
-  (syntax-parse stx
-    [(_ ([x:id-or-bind/let e] ...) body ...)
-     #`(let ()
-         (x.definer x e) ...
-         body ...)]))
+(define-syntax/parse ~letrec
+  [(_ ([x:id-or-bind/let e] ...) body ...)
+   #`(let ()
+       (x.definer x e) ...
+       body ...)])
 
 ;; ~for forms -----------------------------------------------------------------
 (begin-for-syntax
@@ -573,23 +482,20 @@
     (pattern :break-or-final) (pattern body:expr))
   ) ; begin-for-syntax for ~for forms
 
-(define id-fn identity)
-
-(define-syntax (~for/common stx) ; essentially a foldl (ie uses an accum(s))
-  (syntax-parse stx
-    ;; this clause allows naming of the accums so the body can reference them
-    ;; -- used by for/fold and for/lists
-    [(_ (~optional (~seq #:final final))
-        combiner
-        (~optional (~seq #:break? break?))
-        ([accum base] ...)
-        (c:for-clause ...) bb:break/final-or-body ...)
-     #:with (body-res ...) (generate-temporaries #'(accum ...))
-     #:with (b ...) (template ((?@ . bb) ...))
-     #:with ((pre ...) (body ...)) (split-for-body #'(b ...) #'(b ...))
-     #:with (pre-body:break/final-or-body ...) #'(pre ...)
-     #:with expanded-for
-     #`(let ([abort? #f] [accum base] ...)
+(define-syntax/parse ~for/common ; essentially a foldl (ie uses an accum(s))
+  ;; this clause allows naming of the accums so the body can reference them
+  ;; -- used by for/fold and for/lists
+  [(_ (~optional (~seq #:final final))
+      combiner
+      (~optional (~seq #:break? break?))
+      ([accum base] ...)
+      (c:for-clause ...) bb:break/final-or-body ...)
+   #:with (body-res ...) (generate-temporaries #'(accum ...))
+   #:with (b ...) (template ((?@ . bb) ...))
+   #:with ((pre ...) (body ...)) (split-for-body #'(b ...) #'(b ...))
+   #:with (pre-body:break/final-or-body ...) #'(pre ...)
+   #:with expanded-for
+   #`(let ([abort? #f] [accum base] ...)
        #,(let clauseloop ([cs #'(c ...)])
            (syntax-parse cs
              [() 
@@ -615,117 +521,115 @@
                             [(e:expr) #`(begin e #,(finalloop (cdr pbs)))]))))]
              [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
               (with-syntax* 
-               ([one-more-time (clauseloop #'(rst ...))]
-                [((ys ...) ...) #'(b.xs ...)]
-                [(([outer-binding ...]
-                   outer-check
-                   [loop-binding ...]
-                   pos-guard
-                   ;[inner-binding ...]
-                   [[xs next] ...]
-                   pre-guard
-                   post-guard
-                   [loop-arg ...]) ...)
-                 (map (λ (x) (expand-for-clause x x)) (syntax->list #'([b.xs seq] ...)))]
-                [new-loop (generate-temporary)]
-                [its-done #'(values accum ...)]
-                [skip-it #`(if (and post-guard ...) 
-                               (if abort? 
-                                   (values accum ...) 
-                                   (new-loop accum ... loop-arg ... ...))
-                               its-done)]
-                [do-it 
-                 #`(if (and post-guard ...) 
-                       (let-values ([(accum ...) one-more-time])
-                         (if abort?
-                             (values accum ...)
-                             (new-loop accum ... loop-arg ... ...)))
-                       one-more-time)]
-                [conditional-body
-                 (let whenloop ([ws (syntax->list #'(w ...))])
-                   (if (null? ws)
-                       #'do-it
-                       (syntax-parse (car ws)
-                         [(#:when guard) 
-                          (if (eq? (syntax-e #'guard) #t)
-                              (whenloop (cdr ws))
-                              #`(if guard #,(whenloop (cdr ws)) skip-it))]
-                         [(#:unless guard) #`(if guard skip-it #,(whenloop (cdr ws)))]
-                         [(#:break guard) 
-                          #`(if guard 
-                                (begin (set! abort? #t) its-done)
-                                #,(whenloop (cdr ws)))]
-                         [(#:final guard) 
-                          #`(if guard 
-                                (begin (set! abort? #t) #,(whenloop (cdr ws)))
-                                #,(whenloop (cdr ws)))])))])
-               #`(let-values (outer-binding ... ...)
-                   ;; must shadow accum in new loop, in case body references it
-                   (let new-loop ([accum accum] ... loop-binding ... ...)
-                     ;; must check break? first, bc more? pulls an item
-                     (if (and #,@(if (attribute break?) #'((not (break? accum ...))) #'())
-                              pos-guard ...)
-                         (let-values ([xs next] ... ...)
-                           (if (and pre-guard ...)
-                               (~let ([b (values ys ...)] ...) conditional-body)
-                               its-done))
-                         its-done))))])))
-     (if (attribute final)
-         #'(let-values ([(accum ...) expanded-for]) (final accum ...))
-         #'expanded-for)]
-    ;; this clause has unnamed accums; name them and then call the first clause
-    [(_ (~optional (~seq #:final final))
-        combiner
-        (~optional (~seq #:break? break?))
-        (base ...) 
-        (c:for-clause ...) bb:break/final-or-body ...)
-     #:with (accum ...) (generate-temporaries #'(base ...))
-     #`(~for/common #,@(if (attribute final) #'(#:final final) #'())
-                    combiner 
-                    #,@(if (attribute break?) #'(#:break? break?) #'())
-                    ([accum base] ...) 
-                    #,@(template (((?@ . c) ...) (?@ . bb) ...)))]))
+                  ([one-more-time (clauseloop #'(rst ...))]
+                   [((ys ...) ...) #'(b.xs ...)]
+                   [(([outer-binding ...]
+                      outer-check
+                      [loop-binding ...]
+                      pos-guard
+                      ;[inner-binding ...]
+                      [[xs next] ...]
+                      pre-guard
+                      post-guard
+                      [loop-arg ...]) ...)
+                    (map (λ (x) (expand-for-clause x x)) (syntax->list #'([b.xs seq] ...)))]
+                   [new-loop (generate-temporary)]
+                   [its-done #'(values accum ...)]
+                   [skip-it #`(if (and post-guard ...) 
+                                  (if abort? 
+                                      (values accum ...) 
+                                      (new-loop accum ... loop-arg ... ...))
+                                  its-done)]
+                   [do-it 
+                    #`(if (and post-guard ...) 
+                          (let-values ([(accum ...) one-more-time])
+                            (if abort?
+                                (values accum ...)
+                                (new-loop accum ... loop-arg ... ...)))
+                          one-more-time)]
+                   [conditional-body
+                    (let whenloop ([ws (syntax->list #'(w ...))])
+                      (if (null? ws)
+                          #'do-it
+                          (syntax-parse (car ws)
+                            [(#:when guard) 
+                             (if (eq? (syntax-e #'guard) #t)
+                                 (whenloop (cdr ws))
+                                 #`(if guard #,(whenloop (cdr ws)) skip-it))]
+                            [(#:unless guard) #`(if guard skip-it #,(whenloop (cdr ws)))]
+                            [(#:break guard) 
+                             #`(if guard 
+                                   (begin (set! abort? #t) its-done)
+                                   #,(whenloop (cdr ws)))]
+                            [(#:final guard) 
+                             #`(if guard 
+                                   (begin (set! abort? #t) #,(whenloop (cdr ws)))
+                                   #,(whenloop (cdr ws)))])))])
+                #`(let-values (outer-binding ... ...)
+                    ;; must shadow accum in new loop, in case body references it
+                    (let new-loop ([accum accum] ... loop-binding ... ...)
+                      ;; must check break? first, bc more? pulls an item
+                      (if (and #,@(if (attribute break?) #'((not (break? accum ...))) #'())
+                               pos-guard ...)
+                          (let-values ([xs next] ... ...)
+                            (if (and pre-guard ...)
+                                (~let ([b (values ys ...)] ...) conditional-body)
+                                its-done))
+                          its-done))))])))
+   (if (attribute final)
+       #'(let-values ([(accum ...) expanded-for]) (final accum ...))
+       #'expanded-for)]
+  ;; this clause has unnamed accums; name them and then call the first clause
+  [(_ (~optional (~seq #:final final))
+      combiner
+      (~optional (~seq #:break? break?))
+      (base ...) 
+      (c:for-clause ...) bb:break/final-or-body ...)
+   #:with (accum ...) (generate-temporaries #'(base ...))
+   #`(~for/common #,@(if (attribute final) #'(#:final final) #'())
+                  combiner 
+                  #,@(if (attribute break?) #'(#:break? break?) #'())
+                  ([accum base] ...) 
+                  #,@(template (((?@ . c) ...) (?@ . bb) ...)))])
 
 ;; inserts #:when #t between each (non-#:when/unless) clause
-(define-syntax (~for*/common stx)
-  (syntax-parse stx
-    [(_ (~optional (~seq #:final fin))
-        comb
-        (~optional (~seq #:break? b?))
-        (base ...) 
-        ((~seq sb:seq-binding ... wb:when-or-break ...) ...) body ...)
-     #:with ((new-sb ...) ...)
-     ;; append accounts for list added by splicing-syntax-class
-       (map (λ (ss) (append-map 
-                     (λ (s) (append (syntax->list s) (list #'#:when #'#t)))
-                     (syntax->list ss)))
-            (syntax->list #'((sb ...) ...)))
-     ;; wb is also a list (due to splicing-stx-class)
-     #:with (new-clause ...) 
-       (template ((?@ . (new-sb ... (?@ . ((?@ . wb) ...)))) ...))
-     #`(~for/common #,@(if (attribute fin) #'(#:final fin) #'())
-                    comb 
-                    #,@(if (attribute b?) #'(#:break? b?) #'())
-                    (base ...) (new-clause ...) body ...)]))
+(define-syntax/parse ~for*/common
+  [(_ (~optional (~seq #:final fin))
+      comb
+      (~optional (~seq #:break? b?))
+      (base ...) 
+      ((~seq sb:seq-binding ... wb:when-or-break ...) ...) body ...)
+   #:with ((new-sb ...) ...)
+   ;; append accounts for list added by splicing-syntax-class
+   (map (λ (ss) (append-map 
+                 (λ (s) (append (syntax->list s) (list #'#:when #'#t)))
+                 (syntax->list ss)))
+        (syntax->list #'((sb ...) ...)))
+   ;; wb is also a list (due to splicing-stx-class)
+   #:with (new-clause ...) 
+   (template ((?@ . (new-sb ... (?@ . ((?@ . wb) ...)))) ...))
+   #`(~for/common #,@(if (attribute fin) #'(#:final fin) #'())
+                  comb 
+                  #,@(if (attribute b?) #'(#:break? b?) #'())
+                  (base ...) (new-clause ...) body ...)])
 
-(define-syntax (mk~for/ stx)
-  (syntax-parse stx 
-    [(_ name combiner (base ...) 
-        (~optional (~seq #:final fin))
-        (~optional (~seq #:break? b?)))
-     #:with new-name (format-id #'name "~~for/~a" #'name)
-     #:with new-name* (format-id #'name "~~for*/~a" #'name)
-     #`(begin 
-         (define-syntax-rule (new-name x (... ...)) 
-           (~for/common #,@(if (attribute fin) #'(#:final fin) #'())
-                        combiner 
-                        #,@(if (attribute b?) #'(#:break? b?) #'())
-                        (base ...) x (... ...)))
-         (define-syntax-rule (new-name* x (... ...)) 
-           (~for*/common #,@(if (attribute fin) #'(#:final fin) #'()) 
-                         combiner 
-                         #,@(if (attribute b?) #'(#:break? b?) #'())
-                         (base ...) x (... ...))))]))
+(define-syntax/parse mk~for/
+  [(_ name combiner (base ...)
+      (~optional (~seq #:final fin))
+      (~optional (~seq #:break? b?)))
+   #:with new-name (format-id #'name "~~for/~a" #'name)
+   #:with new-name* (format-id #'name "~~for*/~a" #'name)
+   #`(begin 
+       (define-syntax-rule (new-name x (... ...)) 
+         (~for/common #,@(if (attribute fin) #'(#:final fin) #'())
+                      combiner 
+                      #,@(if (attribute b?) #'(#:break? b?) #'())
+                      (base ...) x (... ...)))
+       (define-syntax-rule (new-name* x (... ...)) 
+         (~for*/common #,@(if (attribute fin) #'(#:final fin) #'()) 
+                       combiner 
+                       #,@(if (attribute b?) #'(#:break? b?) #'())
+                       (base ...) x (... ...))))])
 
 (define-syntax-rule (~for x ...) (~for/common void ((void)) x ...))
 (define-syntax-rule (~for* x ...) (~for*/common void ((void)) x ...))
@@ -735,118 +639,112 @@
 ;; - have to reverse args in cons bc acc is first
 (mk~for/ list (λ (acc y) (unsafe-cons-list y acc)) (null) #:final reverse)
 ;; break as soon as we find something
-(mk~for/ first (λ (acc y) y) (#f) #:break? id-fn)
+(mk~for/ first (λ (acc y) y) (#f) #:break? identity)
 (mk~for/ last (λ (acc y) y) (#f))
 (mk~for/ and (λ (acc y) (and acc y)) (#t) #:break? not)
-(mk~for/ or (λ (acc y) (or acc y)) (#f) #:break? id-fn)
+(mk~for/ or (λ (acc y) (or acc y)) (#f) #:break? identity)
 (mk~for/ sum + (0))
 (mk~for/ product * (1))
 (mk~for/ hash hash-set ((hash)))
 (mk~for/ hasheq hash-set ((hasheq)))
 (mk~for/ hasheqv hash-set ((hasheqv)))
 
-(define-syntax (~for/fold stx) ; foldl
-  (syntax-parse stx
-    [(_ ([accum init] ...) (c:for-clause ...) bb:break/final-or-body ...)
-     #:with (res ...) (generate-temporaries #'(accum ...))
-     ;; combiner drops old accums and uses result(s) of body as current accums
-     (template (~for/common
-                #:final values (λ (accum ... res ...) (values res ...))
-                ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))]))
-(define-syntax (~for*/fold stx)
-  (syntax-parse stx
-    [(_ ([accum init] ...) (c:for-clause ...) bb:break/final-or-body ...)
-     #:with (res ...) (generate-temporaries #'(accum ...))
-     ;; combiner drops old accums and uses result(s) of body as current accums
-     (template (~for*/common 
-                #:final values (λ (accum ... res ...) (values res ...))
-                ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))]))
+(define-syntax/parse ~for/fold ; foldl
+  [(_ ([accum init] ...) (c:for-clause ...) bb:break/final-or-body ...)
+   #:with (res ...) (generate-temporaries #'(accum ...))
+   ;; combiner drops old accums and uses result(s) of body as current accums
+   (template (~for/common
+              #:final values (λ (accum ... res ...) (values res ...))
+              ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))])
+(define-syntax/parse ~for*/fold
+  [(_ ([accum init] ...) (c:for-clause ...) bb:break/final-or-body ...)
+   #:with (res ...) (generate-temporaries #'(accum ...))
+   ;; combiner drops old accums and uses result(s) of body as current accums
+   (template (~for*/common 
+              #:final values (λ (accum ... res ...) (values res ...))
+              ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))])
 
-(define-syntax (~for/lists stx)
-  (syntax-parse stx
-    [(_ (accum ...) (c:for-clause ...) bb:break/final-or-body ...)
-     #:with (res ...) (generate-temporaries #'(accum ...))
-     ;; combiner drops old accums and uses result(s) of body as current accums
-     (template (~for/common 
-                #:final (λ (accum ...) (values (reverse accum) ...))
-                (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
-                ([accum null] ...) ((?@ . c) ...) (?@ . bb) ...))]))
-(define-syntax (~for*/lists stx)
-  (syntax-parse stx
-    [(_ (accum ...) (c:for-clause ...) bb:break/final-or-body ...)
-     #:with (res ...) (generate-temporaries #'(accum ...))
-     ;; combiner drops old accums and uses result(s) of body as current accums
-     (template (~for*/common 
-                #:final (λ (accum ...) (values (reverse accum) ...))
-                (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
-                ([accum null] ...) ((?@ . c) ...) (?@ . bb) ...))]))
+(define-syntax/parse ~for/lists
+  [(_ (accum ...) (c:for-clause ...) bb:break/final-or-body ...)
+   #:with (res ...) (generate-temporaries #'(accum ...))
+   ;; combiner drops old accums and uses result(s) of body as current accums
+   (template (~for/common 
+              #:final (λ (accum ...) (values (reverse accum) ...))
+              (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
+              ([accum null] ...) ((?@ . c) ...) (?@ . bb) ...))])
+
+(define-syntax/parse ~for*/lists
+  [(_ (accum ...) (c:for-clause ...) bb:break/final-or-body ...)
+   #:with (res ...) (generate-temporaries #'(accum ...))
+   ;; combiner drops old accums and uses result(s) of body as current accums
+   (template (~for*/common 
+              #:final (λ (accum ...) (values (reverse accum) ...))
+              (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
+              ([accum null] ...) ((?@ . c) ...) (?@ . bb) ...))])
 
 ;; ~for/vector is an imperative mess
-(define-syntax (~for/vector stx) 
-  (syntax-parse stx
-    [(_ (~optional (~seq (~seq #:length len) 
-                         (~optional (~seq #:fill fill) #:defaults ([fill #'0]))))
-        x ...)
-     (if (attribute len)
-         ;; if #:length is specified, then we need a break? because there may
-         ;; be more iterations than #:length
-         #'(let ([vec (make-vector len fill)]
-                 [vec-len len])
-             (define i 0)
-             (~for/common 
-              #:final (λ _ vec)
-              (λ (acc y) (unsafe-vector-set! vec i y) (set! i (add1 i))) ; combiner
-              #:break? (λ _ (>= i vec-len))
-              ((void)) ; base ...
-              x ...))
-         ;; repeatedly checking break? is slow so if no #:length is given,
-         ;; first build list and then copy into a result vector
-         #'(~for/common
-            #:final 
-            (λ (lst) 
-              (let* ([vec-len (length lst)]
-                     [vec (make-vector vec-len)])
-                (let loop ([n vec-len] [lst lst])
-                  (if (zero? n) vec
-                      (let ([n-1 (sub1 n)])
-                        (unsafe-vector-set! vec n-1 (unsafe-car lst))
-                        (loop n-1 (unsafe-cdr lst)))))))
-            (λ (acc y) (unsafe-cons-list y acc))
-            (null)
-            x ...))]))
-(define-syntax (~for*/vector stx) 
-  (syntax-parse stx
-    [(_ (~optional (~seq (~seq #:length len) 
-                         (~optional (~seq #:fill fill) #:defaults ([fill #'0]))))
-        x ...)
-     (if (attribute len)
-         ;; if #:length is specified, then we need a break? because there may
-         ;; be more iterations than #:length
-         #'(let ([vec (make-vector len fill)]
-                 [vec-len len])
-             (define i 0)
-             (~for*/common 
-              #:final (λ _ vec)
-              (λ (acc y) (unsafe-vector-set! vec i y) (set! i (add1 i))) ; combiner
-              #:break? (λ _ (>= i vec-len))
-              ((void)) ; base ...
-              x ...))
-         ;; repeatedly checking break? is slow so if no #:length is given,
-         ;; first build list and then copy into a result vector
-         #'(~for*/common
-            #:final 
-            (λ (lst) 
-              (let* ([vec-len (length lst)]
-                     [vec (make-vector vec-len)])
-                (let loop ([n vec-len] [lst lst])
-                  (if (zero? n) vec
-                      (let ([n-1 (sub1 n)])
-                        (unsafe-vector-set! vec n-1 (unsafe-car lst))
-                        (loop n-1 (unsafe-cdr lst)))))))
-            (λ (acc y) (unsafe-cons-list y acc))
-            (null)
-            x ...))]))
-
+(define-syntax/parse ~for/vector
+  [(_ (~optional (~seq (~seq #:length len) 
+                       (~optional (~seq #:fill fill) #:defaults ([fill #'0]))))
+      x ...)
+   (if (attribute len)
+       ;; if #:length is specified, then we need a break? because there may
+       ;; be more iterations than #:length
+       #'(let ([vec (make-vector len fill)]
+               [vec-len len])
+           (define i 0)
+           (~for/common 
+            #:final (λ _ vec)
+            (λ (acc y) (unsafe-vector-set! vec i y) (set! i (add1 i))) ; combiner
+            #:break? (λ _ (>= i vec-len))
+            ((void)) ; base ...
+            x ...))
+       ;; repeatedly checking break? is slow so if no #:length is given,
+       ;; first build list and then copy into a result vector
+       #'(~for/common
+          #:final 
+          (λ (lst) 
+            (let* ([vec-len (length lst)]
+                   [vec (make-vector vec-len)])
+              (let loop ([n vec-len] [lst lst])
+                (if (zero? n) vec
+                    (let ([n-1 (sub1 n)])
+                      (unsafe-vector-set! vec n-1 (unsafe-car lst))
+                      (loop n-1 (unsafe-cdr lst)))))))
+          (λ (acc y) (unsafe-cons-list y acc))
+          (null)
+          x ...))])
+(define-syntax/parse ~for*/vector
+  [(_ (~optional (~seq (~seq #:length len) 
+                       (~optional (~seq #:fill fill) #:defaults ([fill #'0]))))
+      x ...)
+   (if (attribute len)
+       ;; if #:length is specified, then we need a break? because there may
+       ;; be more iterations than #:length
+       #'(let ([vec (make-vector len fill)]
+               [vec-len len])
+           (define i 0)
+           (~for*/common 
+            #:final (λ _ vec)
+            (λ (acc y) (unsafe-vector-set! vec i y) (set! i (add1 i))) ; combiner
+            #:break? (λ _ (>= i vec-len))
+            ((void)) ; base ...
+            x ...))
+       ;; repeatedly checking break? is slow so if no #:length is given,
+       ;; first build list and then copy into a result vector
+       #'(~for*/common
+          #:final 
+          (λ (lst) 
+            (let* ([vec-len (length lst)]
+                   [vec (make-vector vec-len)])
+              (let loop ([n vec-len] [lst lst])
+                (if (zero? n) vec
+                    (let ([n-1 (sub1 n)])
+                      (unsafe-vector-set! vec n-1 (unsafe-car lst))
+                      (loop n-1 (unsafe-cdr lst)))))))
+          (λ (acc y) (unsafe-cons-list y acc))
+          (null)
+          x ...))])
 
 
 ;; this is a right-folding ~for/common

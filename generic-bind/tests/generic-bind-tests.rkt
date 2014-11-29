@@ -3,6 +3,13 @@
 (require "../generic-bind.rkt"
          syntax/parse) ; need this so that ~seq and syntax-classes are bound
 
+;; sugar for contract testing
+(define-check (check-exn-contract thunk)
+  (check-exn exn:fail:contract? thunk))
+
+(define-check (check-exn-arity thunk)
+  (check-exn exn:fail:contract:arity? thunk))
+
 ;; define non-fns
 (~define x1 (+ 1 2))
 (check-equal? x1 3)
@@ -47,35 +54,23 @@
 (test-case "$c"
   (~define ($c x real?) 3.14159)
   (check-equal? x 3.14159)
-  (check-exn exn:fail:contract?
-             (λ ()
-               (~define ($c x real?) "not a real number")
-               (void)))
+  (check-exn-contract (thunk (~define ($c x real?) "not a real number") (void)))
   (~define ($c ($list f0) (list/c (-> real? real?)))
            (list (λ (x) x)))
   (check-equal? (f0 3.14159) 3.14159)
-  (check-exn exn:fail:contract?
-             (λ ()
-               (f0 "not a real number"))))
+  (check-exn-contract (thunk (f0 "not a real number"))))
 (test-case "~define/contract"
   (~define/contract x real? 3.14159)
   (check-equal? x 3.14159)
-  (check-exn exn:fail:contract?
-             (λ ()
-               (~define/contract x real? "not a real number")
-               (void)))
+  (check-exn-contract (thunk (~define/contract x real? "not a real number") (void)))
   (~define/contract (f x) (-> real? real?)
                     x)
   (check-equal? (f 3.14159) 3.14159)
-  (check-exn exn:fail:contract?
-             (λ ()
-               (f "not a real number")))
+  (check-exn-contract (thunk (f "not a real number")))
   (~define/contract ($list f0) (list/c (-> real? real?))
                     (list (λ (x) x)))
   (check-equal? (f0 3.14159) 3.14159)
-  (check-exn exn:fail:contract?
-             (λ ()
-               (f0 "not a real number"))))
+  (check-exn-contract (thunk (f0 "not a real number"))))
 
 ;; define fns
 (~define (f1 x [y 10] #:z [z 0]) (+ x y z))
@@ -103,14 +98,14 @@
 (~define (fkw1 [($list x y) (list 1 2)]) (+ x y 10))
 (check-equal? (fkw1) 13)
 (check-equal? (fkw1 (list 10 20)) 40)
-(check-exn exn:misc:match? (λ () (fkw1 10)))
+(check-exn exn:misc:match? (thunk (fkw1 10)))
 
 (~define (fkw2 #:A ($list x y)) (+ x y 10))
 (check-equal? (fkw2 #:A (list 1 2)) 13)
 
 (~define (fkw3 #:B [($list x y) (list 1 2)]) (+ x y 10))
 (check-equal? (fkw3 #:B (list 10 20)) 40)
-(check-exn exn:misc:match? (λ () (fkw3 #:B 10)))
+(check-exn exn:misc:match? (thunk (fkw3 #:B 10)))
 
 
 
@@ -121,7 +116,7 @@
 (~define (ggg ($ _)) 12345)
 (check-equal? (ggg 5432) 12345)
 (~define (gggg ($ 11111)) 22222)
-(check-exn exn:misc:match? (λ () (gggg 111))) ; match fail
+(check-exn exn:misc:match? (thunk (gggg 111))) ; match fail
 (check-equal? (gggg 11111) 22222)
 
 ;; lambda tests
@@ -264,7 +259,7 @@
 (check-equal? ((~lambda ($: x xs) (append xs (list x))) (list 1 2 3 4 5)) (list 2 3 4 5 1))
 (check-equal? ((~lambda (f ($: x xs)) (cons (f x) xs)) add1 (list 1 2 3 4)) (list 2 2 3 4))
 (check-equal? ((~lambda (f ($list)) (f 1)) add1 null) 2)
-(check-exn exn:misc:match? (λ () ((~lambda (f ($list)) (f 1)) add1 (list 1 2 3))))
+(check-exn exn:misc:match? (thunk ((~lambda (f ($list)) (f 1)) add1 (list 1 2 3))))
 
 ;; ~case-lambda
 (define casemap1 
@@ -600,67 +595,55 @@
 (check-equal? '(a c) (sequence->list (gen3 (list (cons 'a 'b) (cons 'c 'd)))))
 (check-equal? 
  null 
- (call-with-values (lambda () (~for/fold () ([x '(1 2)]) (values))) (lambda x x)))
+ (call-with-values (thunk (~for/fold () ([x '(1 2)]) (values))) (λ x x)))
 (check-equal? 
- (call-with-values (lambda () (~for/fold () ([x '(1 2)]) (values))) (lambda x x))
- (call-with-values (lambda () (for/fold () ([x '(1 2)]) (values))) (lambda x x)))
+ (call-with-values (thunk (~for/fold () ([x '(1 2)]) (values))) (λ x x))
+ (call-with-values (thunk (for/fold () ([x '(1 2)]) (values))) (λ x x)))
 (check-equal? 
  null 
- (call-with-values (lambda () (~for*/fold () ([x '(1 2)]) (values))) (lambda x x)))
+ (call-with-values (thunk (~for*/fold () ([x '(1 2)]) (values))) (λ x x)))
 (check-equal? 
- (call-with-values (lambda () (~for*/fold () ([x '(1 2)]) (values))) (lambda x x))
- (call-with-values (lambda () (for*/fold () ([x '(1 2)]) (values))) (lambda x x)))
+ (call-with-values (thunk (~for*/fold () ([x '(1 2)]) (values))) (λ x x))
+ (call-with-values (thunk (for*/fold () ([x '(1 2)]) (values))) (λ x x)))
 ;; should still fail when wrong number of accums produced
-(check-exn exn:fail? (lambda () (~for/fold () ([x '(1 2)]) x)))
-(check-exn exn:fail? (lambda () (~for*/fold () ([x '(1 2)]) x)))
+(check-exn exn:fail? (thunk (~for/fold () ([x '(1 2)]) x)))
+(check-exn exn:fail? (thunk (~for*/fold () ([x '(1 2)]) x)))
 
 ;; ~for and ~for* should drop any results and result should be void
 (check-equal? (void) (~for ([x (list 1 2 3)]) x))
 (check-equal? (void) (~for* ([x (list 1 2 3)]) x))
-(check-equal? (call-with-values (lambda () (~for ([x (list 1 2 3)]) x)) (lambda x x))
-              (call-with-values (lambda () (for ([x (list 1 2 3)]) x)) (lambda x x)))
-(check-equal? (call-with-values (lambda () (~for* ([x (list 1 2 3)]) x)) (lambda x x))
-              (call-with-values (lambda () (for* ([x (list 1 2 3)]) x)) (lambda x x)))
+(check-equal? (call-with-values (thunk (~for ([x (list 1 2 3)]) x)) (λ x x))
+              (call-with-values (thunk (for ([x (list 1 2 3)]) x)) (λ x x)))
+(check-equal? (call-with-values (thunk (~for* ([x (list 1 2 3)]) x)) (λ x x))
+              (call-with-values (thunk (for* ([x (list 1 2 3)]) x)) (λ x x)))
 
 ;; ~for/hash and friends
 (check-equal? (~for/hash ([x (list 1 2 3)] [y '(a b c)]) (values x y))
               (hash 1 'a 2 'b 3 'c))
-(check-exn exn:fail:contract:arity?
-           (λ () (~for/hash ([x (list 1 2 3)] [y '(a b c)]) x)))
-(check-exn exn:fail:contract:arity? 
-           (λ () (~for/hash ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+(check-exn-arity (thunk (~for/hash ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn-arity (thunk (~for/hash ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
 
 (check-equal? (~for*/hash ([x (list 1 2 3)] [y '(a b c)]) (values x y))
               (hash 1 'c 2 'c 3 'c))
-(check-exn exn:fail:contract:arity?
-           (λ () (~for*/hash ([x (list 1 2 3)] [y '(a b c)]) x)))
-(check-exn exn:fail:contract:arity? 
-           (λ () (~for*/hash ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+(check-exn-arity (thunk (~for*/hash ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn-arity (thunk (~for*/hash ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
 
 (check-equal? (~for/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x y))
               (hasheq 1 'a 2 'b 3 'c))
-(check-exn exn:fail:contract:arity?
-           (λ () (~for/hasheq ([x (list 1 2 3)] [y '(a b c)]) x)))
-(check-exn exn:fail:contract:arity? 
-           (λ () (~for/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+(check-exn-arity (thunk (~for/hasheq ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn-arity (thunk (~for/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
 
 (check-equal? (~for*/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x y))
               (hasheq 1 'c 2 'c 3 'c))
-(check-exn exn:fail:contract:arity?
-           (λ () (~for*/hasheq ([x (list 1 2 3)] [y '(a b c)]) x)))
-(check-exn exn:fail:contract:arity? 
-           (λ () (~for*/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+(check-exn-arity (thunk (~for*/hasheq ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn-arity (thunk (~for*/hasheq ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
 
 (check-equal? (~for/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x y))
               (hasheqv 1 'a 2 'b 3 'c))
-(check-exn exn:fail:contract:arity?
-           (λ () (~for/hasheqv ([x (list 1 2 3)] [y '(a b c)]) x)))
-(check-exn exn:fail:contract:arity? 
-           (λ () (~for/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+(check-exn-arity (thunk (~for/hasheqv ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn-arity (thunk (~for/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
 
 (check-equal? (~for*/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x y))
               (hasheqv 1 'c 2 'c 3 'c))
-(check-exn exn:fail:contract:arity?
-           (λ () (~for*/hasheqv ([x (list 1 2 3)] [y '(a b c)]) x)))
-(check-exn exn:fail:contract:arity? 
-           (λ () (~for*/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
+(check-exn-arity (thunk (~for*/hasheqv ([x (list 1 2 3)] [y '(a b c)]) x)))
+(check-exn-arity (thunk (~for*/hasheqv ([x (list 1 2 3)] [y '(a b c)]) (values x x x))))
