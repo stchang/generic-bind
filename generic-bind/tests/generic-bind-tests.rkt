@@ -73,51 +73,81 @@
   (check-exn-contract (thunk (f0 "not a real number"))))
 
 ;; define fns
-(~define (f1 x [y 10] #:z [z 0]) (+ x y z))
-(check-equal? (f1 100) 110)
-(check-equal? (f1 100 200) 300)
-(check-equal? (f1 100 200 #:z 300) 600)
+(test-case "define fns"
+  (~define (f1 x [y 10] #:z [z 0]) (+ x y z))
+  (check-equal? (f1 100) 110)
+  (check-equal? (f1 100 200) 300)
+  (check-equal? (f1 100 200 #:z 300) 600)
+  
+  (~define (f3 . rst) rst)
+  (check-equal? (f3 1 2 3) (list 1 2 3))
+  (check-equal? (f3) null)
+  (~define (f4 x y . rst) (cons x (cons y rst)))
+  (check-equal? (f4 1 2 3 4 5 6) (list 1 2 3 4 5 6))
+  (check-equal? (f4 1 2) (list 1 2))
+  
+  (~define (f2 ($ (list x y))) (- x y))
+  (check-equal? (f2 (list 145 45)) 100)
+  (~define (g1 ($ (list (list a b) y ...))) (apply + a b y))
+  (check-equal? (g1 (list (list 101 202) 303)) 606)
+  
+  (~define (f5 ($ (list (list x y) z)) . rst) (cons x (cons y (cons z rst))))
+  (check-equal? (f5 (list (list 1 2) 3)) (list 1 2 3))
+  (check-equal? (f5 (list (list 1 2) 3) 4 5) (list 1 2 3 4 5))
+  )
 
-(~define (f3 . rst) rst)
-(check-equal? (f3 1 2 3) (list 1 2 3))
-(check-equal? (f3) null)
-(~define (f4 x y . rst) (cons x (cons y rst)))
-(check-equal? (f4 1 2 3 4 5 6) (list 1 2 3 4 5 6))
-(check-equal? (f4 1 2) (list 1 2))
-
-(~define (f2 ($ (list x y))) (- x y))
-(check-equal? (f2 (list 145 45)) 100)
-(~define (g1 ($ (list (list a b) y ...))) (apply + a b y))
-(check-equal? (g1 (list (list 101 202) 303)) 606)
-
-(~define (f5 ($ (list (list x y) z)) . rst) (cons x (cons y (cons z rst))))
-(check-equal? (f5 (list (list 1 2) 3)) (list 1 2 3))
-(check-equal? (f5 (list (list 1 2) 3) 4 5) (list 1 2 3 4 5))
+(test-case "curried function shorthand"
+  ;; plain identifiers
+  (~define ((f1 x) y) (+ x y))
+  (check-equal? ((f1 1) 2) 3)
+  
+  ;; gen-bind for outer argument
+  (~define ((f2 x) ($list y)) (+ x y))
+  (check-equal? ((f2 1) '(2)) 3)
+  
+  ;; gen-bind for inner argument
+  (~define ((f3 ($list x)) y) (+ x y))
+  (check-equal? ((f3 '(1)) 2) 3)
+  
+  ;; gen-bind for inner argument binding stuff for default outer argument
+  (~define ((f4 ($list x)) [y x]) (+ x y))
+  (check-equal? ((f4 '[1]) 2) 3)
+  (check-equal? ((f4 '[1])) 2)
+  
+  ;; gen-bind for inner argument binging stuff for gen-bind outer argument
+  (~define ((f5 ($list x)) [($ (and y (== x))) x]) (+ x y))
+  (check-equal? ((f5 '[1]) 1) 2)
+  (check-equal? ((f5 '[1])) 2)
+  (check-exn exn:misc:match? (thunk ((f5 '[1]) 2)))
+  )
 
 ;; generic-bind in keyword or arg-with-default positions
-(~define (fkw1 [($list x y) (list 1 2)]) (+ x y 10))
-(check-equal? (fkw1) 13)
-(check-equal? (fkw1 (list 10 20)) 40)
-(check-exn exn:misc:match? (thunk (fkw1 10)))
-
-(~define (fkw2 #:A ($list x y)) (+ x y 10))
-(check-equal? (fkw2 #:A (list 1 2)) 13)
-
-(~define (fkw3 #:B [($list x y) (list 1 2)]) (+ x y 10))
-(check-equal? (fkw3 #:B (list 10 20)) 40)
-(check-exn exn:misc:match? (thunk (fkw3 #:B 10)))
-
+(test-case "define fns generic-bind in keyword or arg-with-default positions"
+  (~define (fkw1 [($list x y) (list 1 2)]) (+ x y 10))
+  (check-equal? (fkw1) 13)
+  (check-equal? (fkw1 (list 10 20)) 40)
+  (check-exn exn:misc:match? (λ () (fkw1 10)))
+  
+  (~define (fkw2 #:A ($list x y)) (+ x y 10))
+  (check-equal? (fkw2 #:A (list 1 2)) 13)
+  
+  (~define (fkw3 #:B [($list x y) (list 1 2)]) (+ x y 10))
+  (check-equal? (fkw3 #:B (list 10 20)) 40)
+  (check-exn exn:misc:match? (λ () (fkw3 #:B 10)))
+  )
 
 
 
 ;; test non-list pats
-(~define (gg ($ xxx)) (add1 xxx))
-(check-equal? (gg 10001) 10002)
-(~define (ggg ($ _)) 12345)
-(check-equal? (ggg 5432) 12345)
-(~define (gggg ($ 11111)) 22222)
-(check-exn exn:misc:match? (thunk (gggg 111))) ; match fail
-(check-equal? (gggg 11111) 22222)
+(test-case "test non-list pats"
+  (~define (gg ($ xxx)) (add1 xxx))
+  (check-equal? (gg 10001) 10002)
+  (~define (ggg ($ _)) 12345)
+  (check-equal? (ggg 5432) 12345)
+  (~define (gggg ($ 11111)) 22222)
+  (check-exn exn:misc:match? (λ () (gggg 111))) ; match fail
+  (check-equal? (gggg 11111) 22222)
+  )
 
 ;; lambda tests
 

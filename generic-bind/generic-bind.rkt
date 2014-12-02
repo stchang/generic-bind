@@ -271,24 +271,37 @@
 ;; ----------------------------------------------------------------------------
 ;; ~define
 
-;; syntax-classes for ~define
-(begin-for-syntax
-  (define-syntax-class def-function-header
-    (pattern ((~or header:def-function-header name:id) . args:def-fn-args)
-             #:attr new-header 
-                    (template ((?? header.new-header name) . args.new-args))
-             #:attr defs #'args.defs))
+(define-syntax/parse ~define #:stx stx
+  [(_ b:bind body:expr)
+   (syntax/loc stx 
+     (b.definer b body))]
+  [(_ x:id body:expr) (syntax/loc stx (define x body))]
+  [(_ (f:expr . args:expr) body:expr ...+)
+   (quasisyntax/loc stx
+     (~define f
+       #,(syntax/loc stx
+           (~lambda args
+             body ...))))])
 
-  ;; new-arg needs to be spliced bc of keywords
-  ;; def needs to be spliced bc some args don't require defs
-  (define-syntax-class def-fn-args
-    (pattern (arg:fn-arg ...)
-             #:attr new-args (template ((?@ . arg.new-arg) ...))
-             #:attr defs (template ((?@ . arg.def) ...)))
-    (pattern (arg:fn-arg ... . rest:id)
-             #:attr new-args (template ((?@ . arg.new-arg) ... . rest))
-             #:attr defs (template ((?@ . arg.def) ...))))
-    
+(define-syntax/parse ~define/contract #:stx stx
+  [(_ b:bind c:expr body:expr)
+   (syntax/loc stx 
+     (~define ($c b c) body))]
+  [(_ x:id c:expr body:expr)
+   (syntax/loc stx
+     (define/contract x c body))]
+  [(_ (f:expr . args:expr) c:expr body:expr ...+)
+   (quasisyntax/loc stx
+     (~define/contract f c
+       #,(syntax/loc stx
+           (~lambda args
+             body ...))))])
+
+
+;; ----------------------------------------------------------------------------
+;; ~lambda
+
+(begin-for-syntax
   ;; new-arg has to be list because keywords need to be spliced
   ;; def must be list to accomodate args not requiring extra defs
   (define-splicing-syntax-class fn-arg
@@ -324,38 +337,7 @@
     (pattern (~seq kw:keyword [name:id default]) 
              #:attr new-arg #'(kw [name default])
              #:attr def #'()))
-    ) ;; end begin-for-syntax
 
-;; ~define --------------------------------------------------------------------
-(define-syntax/parse ~define #:stx stx
-  [(_ b:bind body:expr)
-   (syntax/loc stx 
-     (b.definer b body))]
-  [(_ x:id body:expr) (syntax/loc stx (define x body))]
-  [(_ ?header:def-function-header ?body ...)
-   (template 
-    (define ?header.new-header 
-      (?@ . ?header.defs)
-      ?body ...))])
-
-(define-syntax/parse ~define/contract #:stx stx
-  [(_ b:bind c:expr body:expr)
-   (syntax/loc stx 
-     (~define ($c b c) body))]
-  [(_ x:id c:expr body:expr)
-   (syntax/loc stx
-     (define/contract x c body))]
-  [(_ ?header:def-function-header c:expr ?body ...)
-   (template 
-    (define/contract ?header.new-header c
-      (?@ . ?header.defs)
-      ?body ...))])
-
-
-;; ----------------------------------------------------------------------------
-;; ~lambda
-
-(begin-for-syntax
   (define-syntax-class lam-function-header
     (pattern args:lam-fn-args
              #:attr new-header #'args.new-args
