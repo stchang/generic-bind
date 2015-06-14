@@ -174,9 +174,8 @@
        (define-syntax-rule (match-$name-define (_ x ...) e) (match-define (name x ...) e))
        (define-syntax-rule (match-$name-let ([(_ x ...) e] (... ...)) body (... ...)) 
          (match-let ([(name x ...) e] (... ...)) body (... ...)))
-       (define-syntax ($name stx)
-         (syntax-parse stx 
-           [(_ x ...) (add-bind-properties #'match-$name-define #'match-$name-let #'(void))])))]
+       (define-syntax/parse $name
+         [(_ x ...) (add-bind-properties #'match-$name-define #'match-$name-let #'(void))]))]
   [(_ name)
    #:with $name (format-id #'name "$~a" #'name)
    #:with match-$name-define (format-id #'here "match-~a-define" #'name)
@@ -186,9 +185,8 @@
        (define-syntax-rule (match-$name-define (_ x ooo) e) (match-define (name x ooo) e))
        (define-syntax-rule (match-$name-let ([(_ x ooo) e] (... ...)) body (... ...)) 
          (match-let ([(name x ooo) e] (... ...)) body (... ...)))
-       (define-syntax ($name stx)
-         (syntax-parse stx 
-           [(_ x ooo) (add-bind-properties #'match-$name-define #'match-$name-let #'(void))])))]
+       (define-syntax/parse $name
+         [(_ x ooo) (add-bind-properties #'match-$name-define #'match-$name-let #'(void))]))]
   )
 
 
