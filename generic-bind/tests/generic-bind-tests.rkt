@@ -1,7 +1,8 @@
 #lang racket
 (require rackunit)
 (require "../generic-bind.rkt"
-         syntax/parse) ; need this so that ~seq and syntax-classes are bound
+         syntax/parse ; need this so that ~seq and syntax-classes are bound
+         (for-syntax (only-in "../stx-utils.rkt" syntax-local-match-introduce-available?)))
 
 ;; sugar for contract testing
 (define-check (check-exn-contract thunk)
@@ -77,6 +78,30 @@
                     (list (λ (x) x)))
   (check-equal? (f0 3.14159) 3.14159)
   (check-exn-contract (thunk (f0 "not a real number"))))
+
+(define-syntax do-if-syntax-local-match-introduce-available
+  (lambda (stx)
+    (if syntax-local-match-introduce-available?
+        (syntax-case stx ()
+          [(_ stuff ...) #'(begin stuff ...)])
+        #'(begin))))
+
+;; nested generic binding instances as match-patterns
+(do-if-syntax-local-match-introduce-available
+ (test-case "nested generic binding instances as match-patterns"
+   (~define ($list ($list x)) '((1)))
+   (check-equal? x 1)
+   (~define ($list x1 ($list x2 x3 ($list ($stx ((~seq kw:keyword arg:expr) ...))) ($list $null)))
+            (list 1 (list 2 3 (list #'(#:a 1 #:b 2 #:c 3)) (list null))))
+   (check-equal? x1 1)
+   (check-equal? x2 2)
+   (check-equal? x3 3)
+   (check-equal? (syntax->datum #'(kw ...))
+                 '(#:a #:b #:c))
+   (check-equal? (syntax->datum #'(arg ...))
+                 '(1 2 3))
+   )
+ )
 
 ;; define fns
 (test-case "define fns"
