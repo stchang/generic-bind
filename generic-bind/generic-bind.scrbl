@@ -34,7 +34,7 @@ A few generic binding instances are currently supported. Defining new generic bi
 @defform[($ match-pattern)]{
   The @racket[match] binding instance. The required pattern is a @racket[match] pattern. May be used in any context.
       
-  Currently does not support nested generic binding instances. In other words, the binding sites in the given pattern may only be identifiers and not other generic binding instances.}
+  Other generic binding insances can be nested within the match pattern.}
 
 @defform/subs[(~vs b ...) ([b define-allowable-generic-binding])]{
   Binding instance for @racket[values]. May only be used in "let" contexts (which means not in @racket[~define] or @racket[~lambda] for example).
@@ -45,14 +45,12 @@ A few generic binding instances are currently supported. Defining new generic bi
 
 @defform[($: x xs)]{
   A @racket[match] binding instance where the outer @racket[match] pattern is @racket[cons]. Equivalent to @racket[($ (cons x xs))]. 
-    
-    No nested generic binding instances are allowed.}
+}
 
 @defform*[(($list x ...)
            ($list x ... : rst))]{
   A @racket[match] binding instance where the outer @racket[match] pattern is either @racket[list] or @racket[list-rest], depending whether a rest argument is supplied. Equivalent to either @racket[($ (list x ...))] or @racket[($ (list-rest x ... rst))].
-    
-    No nested generic binding instances are allowed.}
+}
 
 @defthing[$null _]{ A @racket[match] binding instance for @racket[null].}
 
