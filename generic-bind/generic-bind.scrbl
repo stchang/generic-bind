@@ -34,7 +34,7 @@ A few generic binding instances are currently supported. Defining new generic bi
 @defform[($ match-pattern)]{
   The @racket[match] binding instance. The required pattern is a @racket[match] pattern. May be used in any context.
       
-  Other generic binding insances can be nested within the match pattern.}
+  Other generic binding instances can be nested within the match pattern.}
 
 @defform/subs[(~vs b ...) ([b define-allowable-generic-binding])]{
   Binding instance for @racket[values]. May only be used in "let" contexts (which means not in @racket[~define] or @racket[~lambda] for example).
