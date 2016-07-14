@@ -412,3 +412,6 @@
         (for/list ([x (in-X* #:x '(1 2 3))]) x)))
 
 ;;(report-errs)
+
+;; empty sequence bindings
+(check-equal? (for/list () 1) (list 1))
