@@ -611,7 +611,7 @@
       comb
       (~optional (~seq #:break? b?))
       (base ...) 
-      ((~seq sb:seq-binding ... wb:when-or-break ...) ...) body ...)
+      ((~and (~seq sb:seq-binding ... wb:when-or-break ...) (~seq _ ...+)) ...) body ...)
    #:with ((new-sb ...) ...)
    ;; append accounts for list added by splicing-syntax-class
    (map (λ (ss) (append-map 
