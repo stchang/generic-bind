@@ -84,3 +84,9 @@
 (define syntax-local-match-introduce-available?
   (not (eq? syntax-local-match-introduce-2 syntax-local-match-introduce-fallback)))
 
+(define struct/contract-available?
+  (let-values ([(vars stxs)
+                (parameterize ([current-namespace (make-base-namespace)])
+                  (eval '(require racket/contract/region))
+                  (module->exports 'racket/contract/region))])
+    (ormap (λ (e) (eq? 'struct/contract (car e))) stxs)))

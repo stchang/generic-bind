@@ -2,7 +2,9 @@
 (require rackunit)
 (require "../generic-bind.rkt"
          syntax/parse ; need this so that ~seq and syntax-classes are bound
-         (for-syntax (only-in "../stx-utils.rkt" syntax-local-match-introduce-available?)))
+         (for-syntax (only-in "../stx-utils.rkt"
+                              syntax-local-match-introduce-available?
+                              struct/contract-available?)))
 
 ;; sugar for contract testing
 (define-check (check-exn-contract thunk)
@@ -734,6 +736,13 @@
   )
 
 ;; define-match-bind and ~struct tests ----------------------------------------
+(define-syntax do-if-struct/contract-available
+  (lambda (stx)
+    (if struct/contract-available?
+        (syntax-case stx ()
+          [(_ stuff ...) #'(begin stuff ...)])
+        #'(begin))))
+
 (test-case "define-match-bind and ~struct tests"
   (struct B (x y z))
   (define-match-bind (B x y z))
@@ -752,17 +761,18 @@
   (check-equal? (C-d c) 20)
   (check-equal? (cf c) 44)
 
-  (~struct/contract D ([a number?] [b string?] [[c #:mutable] list?]))
-  (~define (df ($D n s l)) (+ n (string-length s) (length l)))
-  (define d (D 200 "abcdefghij" '(k l m n o p)))
-  (check-true (D? d))
-  (check-equal? (D-a d) 200)
-  (check-equal? (D-b d) "abcdefghij")
-  (check-equal? (D-c d) '(k l m n o p))
-  (check-equal? (df d) 216)
-  (set-D-c! d '(q r s))
-  (check-equal? (D-c d) '(q r s))
-  (check-equal? (df d) 213)
+  (do-if-struct/contract-available
+   (~struct/contract D ([a number?] [b string?] [[c #:mutable] list?]))
+   (~define (df ($D n s l)) (+ n (string-length s) (length l)))
+   (define d (D 200 "abcdefghij" '(k l m n o p)))
+   (check-true (D? d))
+   (check-equal? (D-a d) 200)
+   (check-equal? (D-b d) "abcdefghij")
+   (check-equal? (D-c d) '(k l m n o p))
+   (check-equal? (df d) 216)
+   (set-D-c! d '(q r s))
+   (check-equal? (D-c d) '(q r s))
+   (check-equal? (df d) 213))
 
   ;; define-match-bind on just an id
   (define-match-bind hash-table)
