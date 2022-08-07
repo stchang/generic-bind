@@ -1,0 +1,22 @@
+on: [push, pull_request]
+name: CI
+jobs:
+  build:
+    name: "Build on Racket '${{ matrix.racket-version }}'"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        racket-version: ["6.6", "6.11", "6.12", "7.3", "7.4", "8.4", "8.5", "stable", "current"]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Bogdanp/setup-racket@v0.12
+        with:
+          architecture: x64
+          distribution: full
+          version: ${{ matrix.racket-version }}
+      - name: Installing generic-bind and its dependencies, including docs
+        run: raco pkg install --auto --link --name generic-bind
+      - name: Checking dependencies of generic-bind
+        run: raco setup --check-pkg-deps --unused-pkg-deps generic-bind
+      - name: Testing generic-bind
+        run: raco test -p generic-bind
