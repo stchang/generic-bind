@@ -39,7 +39,7 @@
          ~for* ~for*/list ~for*/fold ~for*/vector ~for*/lists 
          ~for*/first ~for*/last ~for*/and ~for*/or ~for*/sum ~for*/product  
          ~for*/hash ~for*/hasheq ~for*/hasheqv
-         define-match-bind ~struct)
+         define-match-bind ~struct ~struct/contract)
 
 ;; (define-generic-stx bind 
 ;;   (definer letter ids let-only nested-definers nested-idss))
@@ -232,6 +232,16 @@
   [(_ id:id super:id ... (field:struct-field ...) opt ...)
    #'(begin
        (struct id super ... (field ...) opt ...)
+       (define-match-bind (id field.name ...)))])
+
+(begin-for-syntax ;; ~struct/contract syntax classes
+  (define-syntax-class struct/contract-field
+    (pattern [field:struct-field contract:expr] #:attr name #'field.name))
+  ) ; end begin-for-syntax
+(define-syntax/parse ~struct/contract
+  [(_ id:id super:id ... (field:struct/contract-field ...) opt ...)
+   #'(begin
+       (struct/contract id super ... (field ...) opt ...)
        (define-match-bind (id field.name ...)))])
 
 

@@ -751,7 +751,19 @@
   (check-equal? (C-c c) 7)
   (check-equal? (C-d c) 20)
   (check-equal? (cf c) 44)
-  
+
+  (~struct/contract D ([a number?] [b string?] [[c #:mutable] list?]))
+  (~define (df ($D n s l)) (+ n (string-length s) (length l)))
+  (define d (D 200 "abcdefghij" '(k l m n o p)))
+  (check-true (D? d))
+  (check-equal? (D-a d) 200)
+  (check-equal? (D-b d) "abcdefghij")
+  (check-equal? (D-c d) '(k l m n o p))
+  (check-equal? (df d) 216)
+  (set-D-c! d '(q r s))
+  (check-equal? (D-c d) '(q r s))
+  (check-equal? (df d) 213)
+
   ;; define-match-bind on just an id
   (define-match-bind hash-table)
   (~define ($hash-table [keys vals] ...) (hash 'a 1 'b 2 'c 3))
