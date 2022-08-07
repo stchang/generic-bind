@@ -4,6 +4,7 @@
          racket/unsafe/ops
          "syntax-parse-utils.rkt"
          "nested-binds-helper.rkt"
+         "version-utils.rkt"
          (for-syntax syntax/parse
                      racket/syntax
                      racket/list ; append-map
@@ -39,7 +40,8 @@
          ~for* ~for*/list ~for*/fold ~for*/vector ~for*/lists 
          ~for*/first ~for*/last ~for*/and ~for*/or ~for*/sum ~for*/product  
          ~for*/hash ~for*/hasheq ~for*/hasheqv
-         define-match-bind ~struct ~struct/contract)
+         define-match-bind ~struct ~define-struct/contract
+         (if-struct/contract-available-out ~struct/contract))
 
 ;; (define-generic-stx bind 
 ;;   (definer letter ids let-only nested-definers nested-idss))
@@ -238,11 +240,17 @@
   (define-syntax-class struct/contract-field
     (pattern [field:struct-field contract:expr] #:attr name #'field.name))
   ) ; end begin-for-syntax
-(define-syntax/parse ~struct/contract
-  [(_ id:id super:id ... (field:struct/contract-field ...) opt ...)
-   #'(begin
-       (struct/contract id super ... (field ...) opt ...)
-       (define-match-bind (id field.name ...)))])
+(do-if-struct/contract-available
+ (define-syntax/parse ~struct/contract
+   [(_ id:id super:id ... (field:struct/contract-field ...) opt ...)
+    #'(begin
+        (struct/contract id super ... (field ...) opt ...)
+        (define-match-bind (id field.name ...)))]))
+(define-syntax/parse ~define-struct/contract
+   [(_ {~and head {~or id:id (id:id . _)}} (field:struct/contract-field ...) opt ...)
+    #'(begin
+        (define-struct/contract head (field ...) opt ...)
+        (define-match-bind (id field.name ...)))])
 
 
 ;; values generic bind instance

@@ -2,9 +2,7 @@
 (require rackunit)
 (require "../generic-bind.rkt"
          syntax/parse ; need this so that ~seq and syntax-classes are bound
-         (for-syntax (only-in "../stx-utils.rkt"
-                              syntax-local-match-introduce-available?
-                              struct/contract-available?)))
+         "../version-utils.rkt")
 
 ;; sugar for contract testing
 (define-check (check-exn-contract thunk)
@@ -83,13 +81,6 @@
                     (list (λ (x) x)))
   (check-equal? (f0 3.14159) 3.14159)
   (check-exn-contract (thunk (f0 "not a real number"))))
-
-(define-syntax do-if-syntax-local-match-introduce-available
-  (lambda (stx)
-    (if syntax-local-match-introduce-available?
-        (syntax-case stx ()
-          [(_ stuff ...) #'(begin stuff ...)])
-        #'(begin))))
 
 ;; nested generic binding instances as match-patterns
 (do-if-syntax-local-match-introduce-available
@@ -736,13 +727,6 @@
   )
 
 ;; define-match-bind and ~struct tests ----------------------------------------
-(define-syntax do-if-struct/contract-available
-  (lambda (stx)
-    (if struct/contract-available?
-        (syntax-case stx ()
-          [(_ stuff ...) #'(begin stuff ...)])
-        #'(begin))))
-
 (test-case "define-match-bind and ~struct tests"
   (struct B (x y z))
   (define-match-bind (B x y z))
@@ -773,6 +757,18 @@
    (set-D-c! d '(q r s))
    (check-equal? (D-c d) '(q r s))
    (check-equal? (df d) 213))
+
+  (~define-struct/contract E ([a number?] [b string?] [[c #:mutable] list?]))
+  (~define (ef ($E n s l)) (+ n (string-length s) (length l)))
+  (define e (make-E 200 "abcdefghij" '(k l m n o p)))
+  (check-true (E? e))
+  (check-equal? (E-a e) 200)
+  (check-equal? (E-b e) "abcdefghij")
+  (check-equal? (E-c e) '(k l m n o p))
+  (check-equal? (ef e) 216)
+  (set-E-c! e '(q r s))
+  (check-equal? (E-c e) '(q r s))
+  (check-equal? (ef e) 213)
 
   ;; define-match-bind on just an id
   (define-match-bind hash-table)

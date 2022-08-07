@@ -89,4 +89,4 @@
                 (parameterize ([current-namespace (make-base-namespace)])
                   (eval '(require racket/contract/region))
                   (module->exports 'racket/contract/region))])
-    (ormap (λ (e) (eq? 'struct/contract (car e))) stxs)))
+    (ormap (λ (e) (eq? 'struct/contract (car e))) (cdr (assoc 0 stxs)))))
