@@ -663,18 +663,24 @@
 (mk~for/ hasheqv hash-set ((hasheqv)))
 
 (define-syntax/parse ~for/fold ; foldl
-  [(_ ([accum init] ...) (c:for-clause ...) bb:break/final-or-body ...)
+  [(_ ([accum init] ... (~optional (~seq #:result result)))
+      (c:for-clause ...)
+      bb:break/final-or-body ...)
    #:with (res ...) (generate-temporaries #'(accum ...))
    ;; combiner drops old accums and uses result(s) of body as current accums
    (template (~for/common
-              #:final values (λ (accum ... res ...) (values res ...))
+              #:final (?? (λ (accum ...) result) values)
+              (λ (accum ... res ...) (values res ...))
               ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))])
 (define-syntax/parse ~for*/fold
-  [(_ ([accum init] ...) (c:for-clause ...) bb:break/final-or-body ...)
+  [(_ ([accum init] ... (~optional (~seq #:result result)))
+      (c:for-clause ...)
+      bb:break/final-or-body ...)
    #:with (res ...) (generate-temporaries #'(accum ...))
    ;; combiner drops old accums and uses result(s) of body as current accums
    (template (~for*/common 
-              #:final values (λ (accum ... res ...) (values res ...))
+              #:final (?? (λ (accum ...) result) values)
+              (λ (accum ... res ...) (values res ...))
               ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))])
 
 (define-syntax/parse ~for/lists

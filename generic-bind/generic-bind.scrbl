@@ -450,7 +450,7 @@ All the forms in this section are the same as their Racket counterparts (see @ra
 @defform[(~for/list ...)]{}
 @defform[(~for/lists ...)]{}
 @defform[(~for/vector ...)]{}
-@defform[(~for/fold ...)]{}
+@defform[(~for/fold ...)]{Allows generic binds in sequence clauses, not accumulator clauses.}
 @defform[(~for/first ...)]{}
 @defform[(~for/last ...)]{}
 @defform[(~for/or ...)]{}
@@ -465,7 +465,7 @@ All the forms in this section are the same as their Racket counterparts (see @ra
 @defform[(~for*/list ...)]{}
 @defform[(~for*/lists ...)]{}
 @defform[(~for*/vector ...)]{}
-@defform[(~for*/fold ...)]{}
+@defform[(~for*/fold ...)]{Allows generic binds in sequence clauses, not accumulator clauses.}
 @defform[(~for*/first ...)]{}
 @defform[(~for*/last ...)]{}
 @defform[(~for*/or ...)]{}

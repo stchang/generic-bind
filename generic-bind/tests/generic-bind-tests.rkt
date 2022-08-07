@@ -11,6 +11,9 @@
 (define-check (check-exn-arity thunk)
   (check-exn exn:fail:contract:arity? thunk))
 
+(define-syntax-rule (values->list expr)
+  (call-with-values (thunk expr) list))
+
 ;; define non-fns
 (test-case "define non-fns"
   (~define x1 (+ 1 2))
@@ -495,6 +498,18 @@
    (~for/fold ([sum 0]) ([x '(1 2 3 4 5 6)]) (+ x sum))
    (for/fold ([sum 0]) ([x '(1 2 3 4 5 6)]) (+ x sum)))
 
+  (check-equal?
+   (~for/fold ([acc '()]
+               [seen (hash)]
+               #:result (reverse acc))
+              ([x (in-list '(0 1 1 2 3 4 4 4))])
+     (cond
+       [(hash-ref seen x #f)
+        (values acc seen)]
+       [else (values (cons x acc)
+                     (hash-set seen x #t))]))
+   (list 0 1 2 3 4))
+
   (let ([out (open-output-string)])
     (check-false (~for/and ([x (list #t #f #t)]) (displayln x out) x))
     (check-equal? (get-output-string out) "#t\n#f\n")
@@ -658,16 +673,22 @@
   (check-equal? '(a c) (sequence->list (gen3 (list (cons 'a 'b) (cons 'c 'd)))))
   (check-equal? 
    null 
-   (call-with-values (thunk (~for/fold () ([x '(1 2)]) (values))) (λ x x)))
+   (values->list (~for/fold () ([x '(1 2)]) (values))))
   (check-equal? 
-   (call-with-values (thunk (~for/fold () ([x '(1 2)]) (values))) (λ x x))
-   (call-with-values (thunk (for/fold () ([x '(1 2)]) (values))) (λ x x)))
+   (values->list (~for/fold () ([x '(1 2)]) (values)))
+   (values->list (for/fold () ([x '(1 2)]) (values))))
   (check-equal? 
    null 
-   (call-with-values (thunk (~for*/fold () ([x '(1 2)]) (values))) (λ x x)))
+   (values->list (~for*/fold () ([x '(1 2)]) (values))))
   (check-equal? 
-   (call-with-values (thunk (~for*/fold () ([x '(1 2)]) (values))) (λ x x))
-   (call-with-values (thunk (for*/fold () ([x '(1 2)]) (values))) (λ x x)))
+   (values->list (~for*/fold () ([x '(1 2)]) (values)))
+   (values->list (for*/fold () ([x '(1 2)]) (values))))
+  (check-equal? 
+   (list 3) 
+   (values->list (~for/fold (#:result 3) ([x '(1 2)]) (values))))
+  (check-equal? 
+   (list 5) 
+   (values->list (~for/fold (#:result 5) ([x '(1 2)]) (values))))
   ;; should still fail when wrong number of accums produced
   (check-exn exn:fail? (thunk (~for/fold () ([x '(1 2)]) x)))
   (check-exn exn:fail? (thunk (~for*/fold () ([x '(1 2)]) x)))
@@ -675,10 +696,10 @@
   ;; ~for and ~for* should drop any results and result should be void
   (check-equal? (void) (~for ([x (list 1 2 3)]) x))
   (check-equal? (void) (~for* ([x (list 1 2 3)]) x))
-  (check-equal? (call-with-values (thunk (~for ([x (list 1 2 3)]) x)) (λ x x))
-                (call-with-values (thunk (for ([x (list 1 2 3)]) x)) (λ x x)))
-  (check-equal? (call-with-values (thunk (~for* ([x (list 1 2 3)]) x)) (λ x x))
-                (call-with-values (thunk (for* ([x (list 1 2 3)]) x)) (λ x x)))
+  (check-equal? (values->list (~for ([x (list 1 2 3)]) x))
+                (values->list (for ([x (list 1 2 3)]) x)))
+  (check-equal? (values->list (~for* ([x (list 1 2 3)]) x))
+                (values->list (for* ([x (list 1 2 3)]) x)))
   
   ;; ~for/hash and friends
   (check-equal? (~for/hash ([x (list 1 2 3)] [y '(a b c)]) (values x y))
