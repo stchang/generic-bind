@@ -611,7 +611,35 @@ keys
 vals
 ]}
 
-@defform[(~struct ...)]{Exactly like @racket[struct] except a new generic binding instance is also defined. Equivalent to using @racket[struct] and @racket[define-match-bind].
+@defform*[
+ [(~struct struct-id (field ...) struct-option ...)
+  (~struct struct-id super-struct-id (field ...) struct-option ...)]
+ #:grammar ([field field-id
+                   [field-id field-option ...]]
+            [struct-option #:mutable
+                           (code:line #:super super-expr)
+                           (code:line #:inspector inspector-expr)
+                           (code:line #:auto-value auto-expr)
+                           (code:line #:guard guard-expr)
+                           (code:line #:property prop-expr val-expr)
+                           (code:line #:transparent)
+                           (code:line #:prefab)
+                           (code:line #:sealed)
+                           (code:line #:authentic)
+                           (code:line #:name name-id)
+                           (code:line #:extra-name name-id)
+                           (code:line #:constructor-name constructor-id)
+                           (code:line #:extra-constructor-name constructor-id)
+                           (code:line #:reflection-name symbol-expr)
+                           (code:line #:methods gen:name-id method-defs)
+                           #:omit-define-syntaxes
+                           #:omit-define-values]
+            [field-option #:mutable
+                          #:auto]
+            [method-defs (definition ...)])]{
+Exactly like @racket[struct] except a new generic binding
+instance is also defined.
+Equivalent to using @racket[struct] and @racket[define-match-bind].
 
 
 @interaction[#:eval the-eval
@@ -635,7 +663,18 @@ Generic binding instance:
 ]}
 
 @do-if-struct/contract-available[
-@defform[(~struct/contract ...)]{
+@defform*[
+ [(~struct/contract struct-id (field ...) struct-option ...)
+  (~struct/contract struct-id super-struct-id (field ...) struct-option ...)]
+ #:grammar ([field field-id
+                   [field-id field-option ...]]
+            [struct-option #:mutable
+                           (code:line #:auto-value auto-expr)
+                           (code:line #:property prop-expr val-expr)
+                           (code:line #:transparent)
+                           #:omit-define-syntaxes]
+            [field-option #:mutable
+                          #:auto])]{
 Exactly like @racket[struct/contract] except a new generic
 binding instance is also defined.
 Equivalent to using @racket[struct/contract] and
@@ -660,7 +699,18 @@ Generic binding instance:
 (df d)
 ]}]
 
-@defform[(~define-struct/contract ...)]{
+@defform*[
+ [(~define-struct/contract struct-id (field ...) struct-option ...)
+  (~define-struct/contract (struct-id super-struct-id) (field ...) struct-option ...)]
+ #:grammar ([field field-id
+                   [field-id field-option ...]]
+            [struct-option #:mutable
+                           (code:line #:auto-value auto-expr)
+                           (code:line #:property prop-expr val-expr)
+                           (code:line #:transparent)
+                           #:omit-define-syntaxes]
+            [field-option #:mutable
+                          #:auto])]{
 Exactly like @racket[define-struct/contract] except a new
 generic binding instance is also defined.
 Equivalent to using @racket[define-struct/contract] and
