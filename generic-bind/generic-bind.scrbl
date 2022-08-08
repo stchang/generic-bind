@@ -664,8 +664,12 @@ Generic binding instance:
 
 @do-if-struct/contract-available[
 @defform*[
- [(~struct/contract struct-id (field ...) struct-option ...)
-  (~struct/contract struct-id super-struct-id (field ...) struct-option ...)]
+ [(~struct/contract struct-id
+                    ([field contract-expr] ...)
+                    struct-option ...)
+  (~struct/contract struct-id super-struct-id
+                    ([field contract-expr] ...)
+                    struct-option ...)]
  #:grammar ([field field-id
                    [field-id field-option ...]]
             [struct-option #:mutable
@@ -700,8 +704,12 @@ Generic binding instance:
 ]}]
 
 @defform*[
- [(~define-struct/contract struct-id (field ...) struct-option ...)
-  (~define-struct/contract (struct-id super-struct-id) (field ...) struct-option ...)]
+ [(~define-struct/contract struct-id
+                           ([field contract-expr] ...)
+                           struct-option ...)
+  (~define-struct/contract (struct-id super-struct-id)
+                           ([field contract-expr] ...)
+                           struct-option ...)]
  #:grammar ([field field-id
                    [field-id field-option ...]]
             [struct-option #:mutable
