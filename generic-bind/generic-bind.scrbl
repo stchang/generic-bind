@@ -1,5 +1,6 @@
 #lang scribble/manual
 @(require scribble/eval
+          "version-utils.rkt"
           (for-label generic-bind racket syntax/parse))
 
 @title{Racket Generic Binding Forms}
@@ -610,7 +611,35 @@ keys
 vals
 ]}
 
-@defform[(~struct ...)]{Exactly like @racket[struct] except a new generic binding instance is also defined. Equivalent to using @racket[struct] and @racket[define-match-bind].
+@defform*[
+ [(~struct struct-id (field ...) struct-option ...)
+  (~struct struct-id super-struct-id (field ...) struct-option ...)]
+ #:grammar ([field field-id
+                   [field-id field-option ...]]
+            [struct-option #:mutable
+                           (code:line #:super super-expr)
+                           (code:line #:inspector inspector-expr)
+                           (code:line #:auto-value auto-expr)
+                           (code:line #:guard guard-expr)
+                           (code:line #:property prop-expr val-expr)
+                           (code:line #:transparent)
+                           (code:line #:prefab)
+                           (code:line #:sealed)
+                           (code:line #:authentic)
+                           (code:line #:name name-id)
+                           (code:line #:extra-name name-id)
+                           (code:line #:constructor-name constructor-id)
+                           (code:line #:extra-constructor-name constructor-id)
+                           (code:line #:reflection-name symbol-expr)
+                           (code:line #:methods gen:name-id method-defs)
+                           #:omit-define-syntaxes
+                           #:omit-define-values]
+            [field-option #:mutable
+                          #:auto]
+            [method-defs (definition ...)])]{
+Exactly like @racket[struct] except a new generic binding
+instance is also defined.
+Equivalent to using @racket[struct] and @racket[define-match-bind].
 
 
 @interaction[#:eval the-eval
@@ -631,4 +660,85 @@ Generic binding instance:
 @interaction[#:eval the-eval
 (~define (cf ($C e f g h)) (+ e f g h))
 (cf c); 44)
+]}
+
+@do-if-struct/contract-available[
+@defform*[
+ [(~struct/contract struct-id
+                    ([field contract-expr] ...)
+                    struct-option ...)
+  (~struct/contract struct-id super-struct-id
+                    ([field contract-expr] ...)
+                    struct-option ...)]
+ #:grammar ([field field-id
+                   [field-id field-option ...]]
+            [struct-option #:mutable
+                           (code:line #:auto-value auto-expr)
+                           (code:line #:property prop-expr val-expr)
+                           (code:line #:transparent)
+                           #:omit-define-syntaxes]
+            [field-option #:mutable
+                          #:auto])]{
+Exactly like @racket[struct/contract] except a new generic
+binding instance is also defined.
+Equivalent to using @racket[struct/contract] and
+@racket[define-match-bind].
+
+@interaction[#:eval the-eval
+(~struct/contract D ([a number?] [b string?] [[c #:mutable] list?]))
+]
+Behaves like a @racket[struct/contract]-defined struct:
+@interaction[#:eval the-eval
+(define d (D 200 "abcdefghij" '(k l m n o p)))
+(D? d)
+(D-a d)
+(D-b d)
+(D-c d)
+(set-D-c! d '(q r s))
+(D-c d)
+]
+Generic binding instance:
+@interaction[#:eval the-eval
+(~define (df ($D n s l)) (+ n (string-length s) (length l)))
+(df d)
+]}]
+
+@defform*[
+ [(~define-struct/contract struct-id
+                           ([field contract-expr] ...)
+                           struct-option ...)
+  (~define-struct/contract (struct-id super-struct-id)
+                           ([field contract-expr] ...)
+                           struct-option ...)]
+ #:grammar ([field field-id
+                   [field-id field-option ...]]
+            [struct-option #:mutable
+                           (code:line #:auto-value auto-expr)
+                           (code:line #:property prop-expr val-expr)
+                           (code:line #:transparent)
+                           #:omit-define-syntaxes]
+            [field-option #:mutable
+                          #:auto])]{
+Exactly like @racket[define-struct/contract] except a new
+generic binding instance is also defined.
+Equivalent to using @racket[define-struct/contract] and
+@racket[define-match-bind].
+
+@interaction[#:eval the-eval
+(~define-struct/contract E ([a number?] [b string?] [[c #:mutable] list?]))
+]
+Behaves like a @racket[define-struct/contract]-defined struct:
+@interaction[#:eval the-eval
+(define e (make-E 200 "abcdefghij" '(k l m n o p)))
+(E? e)
+(E-a e)
+(E-b e)
+(E-c e)
+(set-E-c! e '(q r s))
+(E-c e)
+]
+Generic binding instance:
+@interaction[#:eval the-eval
+(~define (ef ($E n s l)) (+ n (string-length s) (length l)))
+(ef e)
 ]}
