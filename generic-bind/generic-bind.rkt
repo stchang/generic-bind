@@ -533,63 +533,44 @@
           #,@(for-clauses-do #'(rst ...)))]))
   ) ; begin-for-syntax for ~for forms
 
-(define-syntax/parse mk~for/
-  [(_ name)
-   #:with old-name (format-id #'name "for/~a" #'name)
-   #:with old-name* (format-id #'name "for*/~a" #'name)
-   #:with new-name (format-id #'name "~~for/~a" #'name)
-   #:with new-name* (format-id #'name "~~for*/~a" #'name)
-   #`(begin 
-       (define-syntax-parse-rule (new-name cs:for-clauses x (... ...)) 
-         (old-name cs.do x (... ...)))
-       (define-syntax-parse-rule (new-name* cs:for*-clauses x (... ...)) 
-         (old-name* cs.do x (... ...))))])
+(define-syntax/parse mk~for
+  [(_ name
+      (~optional hpat-before-clauses #:defaults ([hpat-before-clauses #'(~seq)])))
+   #:with old-name (format-id #'name "for~a" #'name)
+   #:with old-name* (format-id #'name "for*~a" #'name)
+   #:with new-name (format-id #'name "~~for~a" #'name)
+   #:with new-name* (format-id #'name "~~for*~a" #'name)
+   #`(begin
+       (define-syntax-parse-rule
+         (new-name (~and (~seq hpat-before-clauses) (~seq bcs (... ...)))
+                   cs:for-clauses
+                   x
+                   (... ...))
+         (old-name bcs (... ...) cs.do x (... ...)))
+       (define-syntax-parse-rule
+         (new-name* (~and (~seq hpat-before-clauses) (~seq bcs (... ...)))
+                    cs:for*-clauses
+                    x
+                    (... ...))
+         (old-name* bcs (... ...) cs.do x (... ...))))])
 
-(define-syntax-parse-rule (~for cs:for-clauses x ...) (for cs.do x ...))
-(define-syntax-parse-rule (~for* cs:for*-clauses x ...) (for* cs.do x ...))
+(mk~for ||)
+(mk~for /list)
+(mk~for /first)
+(mk~for /last)
+(mk~for /and)
+(mk~for /or)
+(mk~for /sum)
+(mk~for /product)
+(mk~for /hash)
+(mk~for /hasheq)
+(mk~for /hasheqv)
 
-(mk~for/ list)
-(mk~for/ first)
-(mk~for/ last)
-(mk~for/ and)
-(mk~for/ or)
-(mk~for/ sum)
-(mk~for/ product)
-(mk~for/ hash)
-(mk~for/ hasheq)
-(mk~for/ hasheqv)
+(mk~for /fold accums)
 
-(define-syntax-parse-rule (~for/fold accums cs:for-clauses bb ...)
-  (for/fold accums cs.do bb ...))
-(define-syntax-parse-rule (~for*/fold accums cs:for*-clauses bb ...)
-  (for*/fold accums cs.do bb ...))
+(mk~for /foldr accums)
 
-(define-syntax-parse-rule (~for/foldr accums cs:for-clauses bb ...)
-  (for/foldr accums cs.do bb ...))
-(define-syntax-parse-rule (~for*/foldr accums cs:for*-clauses bb ...)
-  (for*/foldr accums cs.do bb ...))
+(mk~for /lists accums)
 
-(define-syntax-parse-rule (~for/lists accums cs:for-clauses bb ...)
-  (for/lists accums cs.do bb ...))
-(define-syntax-parse-rule (~for*/lists accums cs:for*-clauses bb ...)
-  (for*/lists accums cs.do bb ...))
-
-(define-syntax-parse-rule
-  (~for/vector (~optional (~seq (~seq #:length len) (~optional (~seq #:fill fill))))
-               cs:for-clauses
-               bb
-               ...)
-  (for/vector (~? (~@ (~@ #:length len) (~? (~@ #:fill fill))))
-    cs.do
-    bb
-    ...))
-(define-syntax-parse-rule
-  (~for*/vector (~optional (~seq (~seq #:length len) (~optional (~seq #:fill fill))))
-                cs:for*-clauses
-                bb
-                ...)
-  (for*/vector (~? (~@ (~@ #:length len) (~? (~@ #:fill fill))))
-    cs.do
-    bb
-    ...))
-
+(mk~for /vector
+        (~optional (~seq (~seq #:length len) (~optional (~seq #:fill fill)))))
