@@ -37,10 +37,10 @@
          ~for ~for/list ~for/vector ~for/fold ~for/foldr ~for/lists
          ~for/first ~for/last
          ~for/and ~for/or ~for/sum ~for/product 
-         ~for/hash ~for/hasheq ~for/hasheqv
+         ~for/hash ~for/hasheq ~for/hasheqv ~for/hashalw
          ~for* ~for*/list ~for*/fold ~for*/foldr ~for*/vector ~for*/lists 
          ~for*/first ~for*/last ~for*/and ~for*/or ~for*/sum ~for*/product  
-         ~for*/hash ~for*/hasheq ~for*/hasheqv
+         ~for*/hash ~for*/hasheq ~for*/hasheqv ~for*/hashalw
          define-match-bind ~struct ~define-struct/contract
          (if-struct/contract-available-out ~struct/contract))
 
@@ -565,6 +565,7 @@
 (mk~for /hash)
 (mk~for /hasheq)
 (mk~for /hasheqv)
+(mk~for /hashalw)
 
 (mk~for /fold accums)
 
