@@ -34,10 +34,11 @@
                      [~m $] [~vs ⋈]
                      [~case-lambda ~case-lam] [~case-define ~case-def])
          ~let ~let* ~letrec
-         ~for ~for/list ~for/vector ~for/fold ~for/lists ~for/first ~for/last 
+         ~for ~for/list ~for/vector ~for/fold ~for/foldr ~for/lists
+         ~for/first ~for/last
          ~for/and ~for/or ~for/sum ~for/product 
          ~for/hash ~for/hasheq ~for/hasheqv
-         ~for* ~for*/list ~for*/fold ~for*/vector ~for*/lists 
+         ~for* ~for*/list ~for*/fold ~for*/foldr ~for*/vector ~for*/lists 
          ~for*/first ~for*/last ~for*/and ~for*/or ~for*/sum ~for*/product  
          ~for*/hash ~for*/hasheq ~for*/hasheqv
          define-match-bind ~struct ~define-struct/contract
@@ -562,6 +563,11 @@
   (for/fold accums cs.do bb ...))
 (define-syntax-parse-rule (~for*/fold accums cs:for*-clauses bb ...)
   (for*/fold accums cs.do bb ...))
+
+(define-syntax-parse-rule (~for/foldr accums cs:for-clauses bb ...)
+  (for/foldr accums cs.do bb ...))
+(define-syntax-parse-rule (~for*/foldr accums cs:for*-clauses bb ...)
+  (for*/foldr accums cs.do bb ...))
 
 (define-syntax-parse-rule (~for/lists accums cs:for-clauses bb ...)
   (for/lists accums cs.do bb ...))
