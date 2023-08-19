@@ -513,6 +513,16 @@
   (define-splicing-syntax-class break/final-or-body 
     (pattern :break-or-final) (pattern body:expr))
 
+  (define-syntax-class for-clauses
+    #:attributes (do)
+    (pattern (c:for-clause ...)
+      #:with do (for-clauses-do #'(c ...))))
+  (define-syntax-class for*-clauses
+    #:attributes (do)
+    (pattern (c:for-clause ...)
+      #:with do
+      (append-map (λ (c) (syntax->list (for-clauses-do (list c))))
+                  (attribute c))))
   (define (for-clauses-do cs)
     (syntax-parse cs
       [() #'()]
@@ -522,258 +532,58 @@
           #,@(for-clauses-do #'(rst ...)))]))
   ) ; begin-for-syntax for ~for forms
 
-(define-syntax/parse ~for/common ; essentially a foldl (ie uses an accum(s))
-  ;; this clause allows naming of the accums so the body can reference them
-  ;; -- used by for/fold and for/lists
-  [(_ (~optional (~seq #:final final))
-      combiner
-      (~optional (~seq #:break? break?))
-      ([accum base] ...)
-      (c:for-clause ...) bb:break/final-or-body ...)
-   #:with (body-res ...) (generate-temporaries #'(accum ...))
-   #:with (c-do ...) (for-clauses-do #'(c ...))
-   #:with (b ...) (template ((?@ . bb) ...))
-   #:with ((pre ...) (body ...)) (split-for-body #'(b ...) #'(b ...))
-   #:with (pre-body:break/final-or-body ...) #'(pre ...)
-   #:with do-body
-   ;; this must be a call-with-values because the number of results
-   ;; is unpredictable (may be 0 values or multiple values)
-   #`(call-with-values 
-      (lambda () body ...)
-      (lambda results (apply combiner accum ... results)))
-   #:with expanded-for
-   #`(for/fold ([accum base] ...) (c-do ...)
-       (~? (~@ #:break (break? accum ...)))
-       (~@ . pre-body)
-       ...
-       do-body)
-   (if (attribute final)
-       #'(let-values ([(accum ...) expanded-for]) (final accum ...))
-       #'expanded-for)]
-  ;; this clause has unnamed accums; name them and then call the first clause
-  [(_ (~optional (~seq #:final final))
-      combiner
-      (~optional (~seq #:break? break?))
-      (base ...) 
-      (c:for-clause ...) bb:break/final-or-body ...)
-   #:with (accum ...) (generate-temporaries #'(base ...))
-   #`(~for/common #,@(if (attribute final) #'(#:final final) #'())
-                  combiner 
-                  #,@(if (attribute break?) #'(#:break? break?) #'())
-                  ([accum base] ...) 
-                  #,@(template (((?@ . c) ...) (?@ . bb) ...)))])
-
-;; inserts #:when #t between each (non-#:when/unless) clause
-(define-syntax/parse ~for*/common
-  [(_ (~optional (~seq #:final fin))
-      comb
-      (~optional (~seq #:break? b?))
-      (base ...) 
-      ((~and (~seq sb:seq-binding ... wb:when-or-break ...) (~seq _ ...+)) ...) body ...)
-   #:with ((new-sb ...) ...)
-   ;; append accounts for list added by splicing-syntax-class
-   (map (λ (ss) (append-map 
-                 (λ (s) (append (syntax->list s) (list #'#:when #'#t)))
-                 (syntax->list ss)))
-        (syntax->list #'((sb ...) ...)))
-   ;; wb is also a list (due to splicing-stx-class)
-   #:with (new-clause ...) 
-   (template ((?@ . (new-sb ... (?@ . ((?@ . wb) ...)))) ...))
-   #`(~for/common #,@(if (attribute fin) #'(#:final fin) #'())
-                  comb 
-                  #,@(if (attribute b?) #'(#:break? b?) #'())
-                  (base ...) (new-clause ...) body ...)])
-
 (define-syntax/parse mk~for/
-  [(_ name combiner (base ...)
-      (~optional (~seq #:final fin))
-      (~optional (~seq #:break? b?)))
+  [(_ name)
+   #:with old-name (format-id #'name "for/~a" #'name)
+   #:with old-name* (format-id #'name "for*/~a" #'name)
    #:with new-name (format-id #'name "~~for/~a" #'name)
    #:with new-name* (format-id #'name "~~for*/~a" #'name)
    #`(begin 
-       (define-syntax-rule (new-name x (... ...)) 
-         (~for/common #,@(if (attribute fin) #'(#:final fin) #'())
-                      combiner 
-                      #,@(if (attribute b?) #'(#:break? b?) #'())
-                      (base ...) x (... ...)))
-       (define-syntax-rule (new-name* x (... ...)) 
-         (~for*/common #,@(if (attribute fin) #'(#:final fin) #'()) 
-                       combiner 
-                       #,@(if (attribute b?) #'(#:break? b?) #'())
-                       (base ...) x (... ...))))])
+       (define-syntax-parse-rule (new-name cs:for-clauses x (... ...)) 
+         (old-name cs.do x (... ...)))
+       (define-syntax-parse-rule (new-name* cs:for*-clauses x (... ...)) 
+         (old-name* cs.do x (... ...))))])
 
-(define-syntax-rule (~for x ...) (~for/common void ((void)) x ...))
-(define-syntax-rule (~for* x ...) (~for*/common void ((void)) x ...))
+(define-syntax-parse-rule (~for cs:for-clauses x ...) (for cs.do x ...))
+(define-syntax-parse-rule (~for* cs:for*-clauses x ...) (for* cs.do x ...))
 
-;; ~for/list ~for*/list and ~for/lists probably need a "right folding" for/common
-;;   but for now, just reverse the output
-;; - have to reverse args in cons bc acc is first
-(mk~for/ list (λ (acc y) (unsafe-cons-list y acc)) (null) #:final reverse)
-;; break as soon as we find something
-(mk~for/ first (λ (acc y) y) (#f) #:break? identity)
-(mk~for/ last (λ (acc y) y) (#f))
-(mk~for/ and (λ (acc y) (and acc y)) (#t) #:break? not)
-(mk~for/ or (λ (acc y) (or acc y)) (#f) #:break? identity)
-(mk~for/ sum + (0))
-(mk~for/ product * (1))
-(mk~for/ hash hash-set ((hash)))
-(mk~for/ hasheq hash-set ((hasheq)))
-(mk~for/ hasheqv hash-set ((hasheqv)))
+(mk~for/ list)
+(mk~for/ first)
+(mk~for/ last)
+(mk~for/ and)
+(mk~for/ or)
+(mk~for/ sum)
+(mk~for/ product)
+(mk~for/ hash)
+(mk~for/ hasheq)
+(mk~for/ hasheqv)
 
-(define-syntax/parse ~for/fold ; foldl
-  [(_ ([accum init] ... (~optional (~seq #:result result)))
-      (c:for-clause ...)
-      bb:break/final-or-body ...)
-   #:with (res ...) (generate-temporaries #'(accum ...))
-   ;; combiner drops old accums and uses result(s) of body as current accums
-   (template (~for/common
-              #:final (?? (λ (accum ...) result) values)
-              (λ (accum ... res ...) (values res ...))
-              ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))])
-(define-syntax/parse ~for*/fold
-  [(_ ([accum init] ... (~optional (~seq #:result result)))
-      (c:for-clause ...)
-      bb:break/final-or-body ...)
-   #:with (res ...) (generate-temporaries #'(accum ...))
-   ;; combiner drops old accums and uses result(s) of body as current accums
-   (template (~for*/common 
-              #:final (?? (λ (accum ...) result) values)
-              (λ (accum ... res ...) (values res ...))
-              ([accum init] ...) ((?@ . c) ...) (?@ . bb) ...))])
+(define-syntax-parse-rule (~for/fold accums cs:for-clauses bb ...)
+  (for/fold accums cs.do bb ...))
+(define-syntax-parse-rule (~for*/fold accums cs:for*-clauses bb ...)
+  (for*/fold accums cs.do bb ...))
 
-(define-syntax/parse ~for/lists
-  [(_ (accum ...) (c:for-clause ...) bb:break/final-or-body ...)
-   #:with (res ...) (generate-temporaries #'(accum ...))
-   ;; combiner drops old accums and uses result(s) of body as current accums
-   (template (~for/common 
-              #:final (λ (accum ...) (values (reverse accum) ...))
-              (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
-              ([accum null] ...) ((?@ . c) ...) (?@ . bb) ...))])
+(define-syntax-parse-rule (~for/lists accums cs:for-clauses bb ...)
+  (for/lists accums cs.do bb ...))
+(define-syntax-parse-rule (~for*/lists accums cs:for*-clauses bb ...)
+  (for*/lists accums cs.do bb ...))
 
-(define-syntax/parse ~for*/lists
-  [(_ (accum ...) (c:for-clause ...) bb:break/final-or-body ...)
-   #:with (res ...) (generate-temporaries #'(accum ...))
-   ;; combiner drops old accums and uses result(s) of body as current accums
-   (template (~for*/common 
-              #:final (λ (accum ...) (values (reverse accum) ...))
-              (λ (accum ... res ...) (values (unsafe-cons-list res accum) ...))
-              ([accum null] ...) ((?@ . c) ...) (?@ . bb) ...))])
+(define-syntax-parse-rule
+  (~for/vector (~optional (~seq (~seq #:length len) (~optional (~seq #:fill fill))))
+               cs:for-clauses
+               bb
+               ...)
+  (for/vector (~? (~@ (~@ #:length len) (~? (~@ #:fill fill))))
+    cs.do
+    bb
+    ...))
+(define-syntax-parse-rule
+  (~for*/vector (~optional (~seq (~seq #:length len) (~optional (~seq #:fill fill))))
+                cs:for*-clauses
+                bb
+                ...)
+  (for*/vector (~? (~@ (~@ #:length len) (~? (~@ #:fill fill))))
+    cs.do
+    bb
+    ...))
 
-;; ~for/vector is an imperative mess
-(define-syntax/parse ~for/vector
-  [(_ (~optional (~seq (~seq #:length len) 
-                       (~optional (~seq #:fill fill) #:defaults ([fill #'0]))))
-      x ...)
-   (if (attribute len)
-       ;; if #:length is specified, then we need a break? because there may
-       ;; be more iterations than #:length
-       #'(let ([vec (make-vector len fill)]
-               [vec-len len])
-           (define i 0)
-           (~for/common 
-            #:final (λ _ vec)
-            (λ (acc y) (unsafe-vector-set! vec i y) (set! i (add1 i))) ; combiner
-            #:break? (λ _ (>= i vec-len))
-            ((void)) ; base ...
-            x ...))
-       ;; repeatedly checking break? is slow so if no #:length is given,
-       ;; first build list and then copy into a result vector
-       #'(~for/common
-          #:final 
-          (λ (lst) 
-            (let* ([vec-len (length lst)]
-                   [vec (make-vector vec-len)])
-              (let loop ([n vec-len] [lst lst])
-                (if (zero? n) vec
-                    (let ([n-1 (sub1 n)])
-                      (unsafe-vector-set! vec n-1 (unsafe-car lst))
-                      (loop n-1 (unsafe-cdr lst)))))))
-          (λ (acc y) (unsafe-cons-list y acc))
-          (null)
-          x ...))])
-(define-syntax/parse ~for*/vector
-  [(_ (~optional (~seq (~seq #:length len) 
-                       (~optional (~seq #:fill fill) #:defaults ([fill #'0]))))
-      x ...)
-   (if (attribute len)
-       ;; if #:length is specified, then we need a break? because there may
-       ;; be more iterations than #:length
-       #'(let ([vec (make-vector len fill)]
-               [vec-len len])
-           (define i 0)
-           (~for*/common 
-            #:final (λ _ vec)
-            (λ (acc y) (unsafe-vector-set! vec i y) (set! i (add1 i))) ; combiner
-            #:break? (λ _ (>= i vec-len))
-            ((void)) ; base ...
-            x ...))
-       ;; repeatedly checking break? is slow so if no #:length is given,
-       ;; first build list and then copy into a result vector
-       #'(~for*/common
-          #:final 
-          (λ (lst) 
-            (let* ([vec-len (length lst)]
-                   [vec (make-vector vec-len)])
-              (let loop ([n vec-len] [lst lst])
-                (if (zero? n) vec
-                    (let ([n-1 (sub1 n)])
-                      (unsafe-vector-set! vec n-1 (unsafe-car lst))
-                      (loop n-1 (unsafe-cdr lst)))))))
-          (λ (acc y) (unsafe-cons-list y acc))
-          (null)
-          x ...))])
-
-
-;; this is a right-folding ~for/common
-;;  it's currently unused, but would probably be faster for ~for/list
-;#;(define-syntax (~for/common/foldr stx)
-;  (syntax-parse stx
-;    [(_ flatten combiner base (c:for-clause ...) bb:break-clause ... body:expr ...)
-;     #:with expanded-for
-;     (let ([depth 0])
-;       (define res
-;     (let stxloop ([cs #'(c ... bb ...)])
-;       (syntax-parse cs
-;         [() #'(begin body ...)]
-;         [(([b:for-binder seq:expr]) ... (w:when-or-break) ... rst ...)
-;;          #:with (s ...) (generate-temporaries #'(b ...))
-;          #:with (seq-not-empty? ...) (generate-temporaries #'(b ...))
-;          #:with (seq-next ...) (generate-temporaries #'(b ...))
-;          #:with new-loop (generate-temporary)
-;          #:with skip-it #'(new-loop) ;;#'(new-loop (seq-rst s) ...)
-;          #:with do-it 
-;;            #`(call-with-values 
-;;               (λ () #,(stxloop #'(rst ...)))
-;;               (λ this-iter (call-with-values 
-;;                        (λ () skip-it)
-;;                        (λ other-iters (combiner this-iter other-iters)))))
-;          #`(let ([result #,(stxloop #'(rst ...))]) (combiner result skip-it))
-;          #:with its-done #'base
-;          #:with one-more-time 
-;;            #`(call-with-values 
-;;               (λ () #,(stxloop #'(rst ...)))
-;;               (λ this-iter (call-with-values 
-;;                             (λ () base)
-;;                             (λ other-iters (combiner this-iter other-iters)))))
-;            #`(let ([result #,(stxloop #'(rst ...))]) (combiner result base))
-;          #:with conditional-body
-;            (let whenloop ([ws (syntax->list #'((w) ...))])
-;              (if (null? ws)
-;                  #'do-it
-;                  (syntax-parse (car ws)
-;                    [((#:when guard)) #`(if guard #,(whenloop (cdr ws)) skip-it)]
-;                    [((#:unless guard)) #`(if guard skip-it #,(whenloop (cdr ws)))]
-;                    [((#:break guard)) #`(if guard its-done #,(whenloop (cdr ws)))]
-;                    [((#:final guard)) #`(if guard one-more-time #,(whenloop (cdr ws)))])))
-;            (set! depth (add1 depth))
-;          #`(let-values ([(seq-not-empty? seq-next) (sequence-generate seq)] ...)
-;               (let new-loop ()
-;                 (if (and (seq-not-empty?) ...)
-;                     (~let ([b.new-b (seq-next)] ...)
-;;                       #,@(append-map syntax->list (syntax->list #'(b.nested-defs ...)))
-;                           conditional-body)
-;                     base)))])))
-;       (let flatten-loop ([n (- depth 2)] [res res])
-;         (if (<= n 0) res
-;           (flatten-loop (sub1 n) #`(flatten #,res)))))
-;     #'expanded-for]))
