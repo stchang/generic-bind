@@ -542,7 +542,11 @@
       (lambda () body ...)
       (lambda results (apply combiner accum ... results)))
    #:with expanded-for
-   #`(for/fold ([accum base] ...) (c-do ...) (~@ . pre-body) ... do-body)
+   #`(for/fold ([accum base] ...) (c-do ...)
+       (~? (~@ #:break (break? accum ...)))
+       (~@ . pre-body)
+       ...
+       do-body)
    (if (attribute final)
        #'(let-values ([(accum ...) expanded-for]) (final accum ...))
        #'expanded-for)]
