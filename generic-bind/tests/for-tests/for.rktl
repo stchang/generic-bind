@@ -495,3 +495,58 @@
      (check-false evaluated-yet?)
      (force start)
      (check-true evaluated-yet?))))
+
+(test-case "for vs for* scope"
+  (let ([a '(o0o uwu tτt eϵe rρr ....)]
+        [b '(#\s #\p #\a #\c #\e #\!)]
+        [c 3])
+    (check-equal? (for/list ([($ (app symbol->string b)) a]
+                             [($ (app char-upcase c)) b])
+                    (list b c))
+                  '(("o0o" #\S)
+                    ("uwu" #\P)
+                    ("tτt" #\A)
+                    ("eϵe" #\C)
+                    ("rρr" #\E)
+                    ("...." #\!)))
+    (check-equal? (for/list ([($ (app symbol->string b)) a]
+                             #:when (= c (string-length b))
+                             [($ (app char-upcase c)) b])
+                    (list b c))
+                  '(("o0o" #\O)
+                    ("o0o" #\0)
+                    ("o0o" #\O)
+                    ("uwu" #\U)
+                    ("uwu" #\W)
+                    ("uwu" #\U)
+                    ("tτt" #\T)
+                    ("tτt" #\Τ) ; Greek uppercase Tau
+                    ("tτt" #\T)
+                    ("eϵe" #\E)
+                    ("eϵe" #\Ε) ; Greek uppercase Epsilon
+                    ("eϵe" #\E)
+                    ("rρr" #\R)
+                    ("rρr" #\Ρ) ; Greek uppercase Rho
+                    ("rρr" #\R)))
+    (check-equal? (for*/list ([($ (app symbol->string b)) a]
+                              [($ (app char-upcase c)) b])
+                    (list b c))
+                  '(("o0o" #\O)
+                    ("o0o" #\0)
+                    ("o0o" #\O)
+                    ("uwu" #\U)
+                    ("uwu" #\W)
+                    ("uwu" #\U)
+                    ("tτt" #\T)
+                    ("tτt" #\Τ) ; Greek uppercase Tau
+                    ("tτt" #\T)
+                    ("eϵe" #\E)
+                    ("eϵe" #\Ε) ; Greek uppercase Epsilon
+                    ("eϵe" #\E)
+                    ("rρr" #\R)
+                    ("rρr" #\Ρ) ; Greek uppercase Rho
+                    ("rρr" #\R)
+                    ("...." #\.)
+                    ("...." #\.)
+                    ("...." #\.)
+                    ("...." #\.)))))
