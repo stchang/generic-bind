@@ -8,7 +8,8 @@
          "for-util.rkt")
 (require rackunit)
 
-(require "../../as-rkt-names.rkt")
+(require "../../as-rkt-names.rkt"
+         "../../version-utils.rkt")
 
 (test-sequence [(0 1 2)] 3)
 (test-sequence [(0 1 2)] (in-range 3))
@@ -350,10 +351,6 @@
       (for/hash ([v (in-naturals)]
                  [k '(a b c)])
                 (values k (add1 v))))
-(test #hashalw((a . 1) (b . 2) (c . 3)) 'mk-hashalw
-      (for/hashalw ([v (in-naturals)]
-                    [k '(a b c)])
-        (values k (add1 v))))
 (test #hasheq((a . 1) (b . 2) (c . 3)) 'mk-hasheq
       (for/hasheq ([v (in-naturals)]
                    [k '(a b c)])
@@ -362,10 +359,6 @@
       (for*/hash ([k '(a b c)]
                    [v (in-range 3)])
                   (values k (add1 v))))
-(test #hashalw((a . 3) (b . 3) (c . 3)) 'mk-hashalw
-      (for*/hashalw ([k '(a b c)]
-                     [v (in-range 3)])
-        (values k (add1 v))))
 (test #hasheq((a . 3) (b . 3) (c . 3)) 'mk-hasheq
       (for*/hasheq ([k '(a b c)]
                      [v (in-range 3)])
@@ -382,6 +375,16 @@
 (test #hash((1 . 1) (2 . 2) (3 . 3)) 'cp-hash
       (for/hash ([v (in-hash-values #hash((a . 1) (b . 2) (c . 3)))])
                 (values v v)))
+
+(do-if-for/hashalw-available
+ (test #hashalw((a . 1) (b . 2) (c . 3)) 'mk-hashalw
+       (for/hashalw ([v (in-naturals)]
+                     [k '(a b c)])
+         (values k (add1 v))))
+ (test #hashalw((a . 3) (b . 3) (c . 3)) 'mk-hashalw
+       (for*/hashalw ([k '(a b c)]
+                      [v (in-range 3)])
+         (values k (add1 v)))))
 
 (test 1 'parallel-or-first
       (for/or (((a b) (in-parallel '(1 #f) '(#t #f)))) 
@@ -430,64 +433,65 @@
       (λ () (check-equal? (thunk) expected-value))))
   (check-equal? actual-output expected-output))
 
-(test-case "for/foldr"
-  (define (in-printing seq)
-    (sequence-map (lambda (v) (println v) v) seq))
+(do-if-for/foldr-available
+ (test-case "for/foldr"
+   (define (in-printing seq)
+     (sequence-map (lambda (v) (println v) v) seq))
 
-  (check-output-equal?
-   (λ ()
-     (for/foldr ([acc '()])
-       ([v (in-printing (in-range 1 4))])
-       (println v)
-       (cons v acc)))
-   "1\n2\n3\n3\n2\n1\n"
-   '(1 2 3))
+   (check-output-equal?
+    (λ ()
+      (for/foldr ([acc '()])
+        ([v (in-printing (in-range 1 4))])
+        (println v)
+        (cons v acc)))
+    "1\n2\n3\n3\n2\n1\n"
+    '(1 2 3))
 
-  (check-output-equal?
-   (λ ()
-     (for/foldr ([acc '()] #:delay)
-       ([v (in-range 1 4)])
-       (printf "--> ~v\n" v)
-       (begin0
-         (cons v (force acc))
-         (printf "<-- ~v\n" v))))
-   "--> 1\n--> 2\n--> 3\n<-- 3\n<-- 2\n<-- 1\n"
-   '(1 2 3))
+   (check-output-equal?
+    (λ ()
+      (for/foldr ([acc '()] #:delay)
+        ([v (in-range 1 4)])
+        (printf "--> ~v\n" v)
+        (begin0
+          (cons v (force acc))
+          (printf "<-- ~v\n" v))))
+    "--> 1\n--> 2\n--> 3\n<-- 3\n<-- 2\n<-- 1\n"
+    '(1 2 3))
 
-  (let ([out (open-output-string)])
-    (define resume
-      (parameterize ([current-output-port out])
-        (for/foldr ([acc '()] #:delay)
-          ([v (in-range 1 5)])
-          (printf "--> ~v\n" v)
-          (begin0
-            (cond
-              [(= v 1) (force acc)]
-              [(= v 2) acc]
-              [else    (cons v (force acc))])
-            (printf "<-- ~v\n" v)))))
-    (check-pred promise? resume)
-    (check-equal? (get-output-string out)
-                  "--> 1\n--> 2\n<-- 2\n<-- 1\n")
-    (check-output-equal? (λ () (force resume))
-                         "--> 3\n--> 4\n<-- 4\n<-- 3\n"
-                         '(3 4)))
+   (let ([out (open-output-string)])
+     (define resume
+       (parameterize ([current-output-port out])
+         (for/foldr ([acc '()] #:delay)
+           ([v (in-range 1 5)])
+           (printf "--> ~v\n" v)
+           (begin0
+             (cond
+               [(= v 1) (force acc)]
+               [(= v 2) acc]
+               [else    (cons v (force acc))])
+             (printf "<-- ~v\n" v)))))
+     (check-pred promise? resume)
+     (check-equal? (get-output-string out)
+                   "--> 1\n--> 2\n<-- 2\n<-- 1\n")
+     (check-output-equal? (λ () (force resume))
+                          "--> 3\n--> 4\n<-- 4\n<-- 3\n"
+                          '(3 4)))
 
-  (define squares (for/foldr ([s empty-stream] #:delay)
-                    ([n (in-naturals)])
-                    (stream-cons (* n n) (force s))))
-  (check-equal? (stream->list (stream-take squares 10))
-                '(0 1 4 9 16 25 36 49 64 81))
+   (define squares (for/foldr ([s empty-stream] #:delay)
+                     ([n (in-naturals)])
+                     (stream-cons (* n n) (force s))))
+   (check-equal? (stream->list (stream-take squares 10))
+                 '(0 1 4 9 16 25 36 49 64 81))
 
-  (let ([evaluated-yet? #f])
-    (for/foldr ([acc (set! evaluated-yet? #t)] #:delay) ()
-      (force acc))
-    (check-true evaluated-yet?))
+   (let ([evaluated-yet? #f])
+     (for/foldr ([acc (set! evaluated-yet? #t)] #:delay) ()
+       (force acc))
+     (check-true evaluated-yet?))
 
-  (let ([evaluated-yet? #f])
-    (define start
-      (for/foldr ([acc (set! evaluated-yet? #t)] #:delay #:result acc) ()
-        (force acc)))
-    (check-false evaluated-yet?)
-    (force start)
-    (check-true evaluated-yet?)))
+   (let ([evaluated-yet? #f])
+     (define start
+       (for/foldr ([acc (set! evaluated-yet? #t)] #:delay #:result acc) ()
+         (force acc)))
+     (check-false evaluated-yet?)
+     (force start)
+     (check-true evaluated-yet?))))

@@ -2,7 +2,11 @@
 
 (provide do-if-struct/contract-available
          do-if-syntax-local-match-introduce-available
-         if-struct/contract-available-out)
+         do-if-for/foldr-available
+         do-if-for/hashalw-available
+         if-struct/contract-available-out
+         if-for/foldr-available-out
+         if-for/hashalw-available-out)
 
 (require racket/provide-syntax
          (for-syntax racket/base
@@ -22,9 +26,37 @@
           [(_ stuff ...) #'(begin stuff ...)])
         #'(begin))))
 
+(define-syntax do-if-for/foldr-available
+  (lambda (stx)
+    (if for/hashalw-available?
+        (syntax-case stx ()
+          [(_ stuff ...) #'(begin stuff ...)])
+        #'(begin))))
+
+(define-syntax do-if-for/hashalw-available
+  (lambda (stx)
+    (if for/hashalw-available?
+        (syntax-case stx ()
+          [(_ stuff ...) #'(begin stuff ...)])
+        #'(begin))))
+
 (define-provide-syntax if-struct/contract-available-out
   (lambda (stx)
     (if struct/contract-available?
+        (syntax-case stx ()
+          [(_ stuff ...) #'(combine-out stuff ...)])
+        #'(combine-out))))
+
+(define-provide-syntax if-for/foldr-available-out
+  (lambda (stx)
+    (if for/foldr-available?
+        (syntax-case stx ()
+          [(_ stuff ...) #'(combine-out stuff ...)])
+        #'(combine-out))))
+
+(define-provide-syntax if-for/hashalw-available-out
+  (lambda (stx)
+    (if for/hashalw-available?
         (syntax-case stx ()
           [(_ stuff ...) #'(combine-out stuff ...)])
         #'(combine-out))))

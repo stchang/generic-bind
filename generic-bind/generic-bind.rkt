@@ -34,15 +34,17 @@
                      [~m $] [~vs ⋈]
                      [~case-lambda ~case-lam] [~case-define ~case-def])
          ~let ~let* ~letrec
-         ~for ~for/list ~for/vector ~for/fold ~for/foldr ~for/lists
+         ~for ~for/list ~for/vector ~for/fold ~for/lists
          ~for/first ~for/last
          ~for/and ~for/or ~for/sum ~for/product 
-         ~for/hash ~for/hasheq ~for/hasheqv ~for/hashalw
-         ~for* ~for*/list ~for*/fold ~for*/foldr ~for*/vector ~for*/lists 
+         ~for/hash ~for/hasheq ~for/hasheqv
+         ~for* ~for*/list ~for*/fold ~for*/vector ~for*/lists 
          ~for*/first ~for*/last ~for*/and ~for*/or ~for*/sum ~for*/product  
-         ~for*/hash ~for*/hasheq ~for*/hasheqv ~for*/hashalw
+         ~for*/hash ~for*/hasheq ~for*/hasheqv
          define-match-bind ~struct ~define-struct/contract
-         (if-struct/contract-available-out ~struct/contract))
+         (if-struct/contract-available-out ~struct/contract)
+         (if-for/foldr-available-out ~for/foldr ~for*/foldr)
+         (if-for/hashalw-available-out ~for/hashalw ~for*/hashalw))
 
 ;; (define-generic-stx bind 
 ;;   (definer letter ids let-only nested-definers nested-idss))
@@ -565,11 +567,13 @@
 (mk~for /hash)
 (mk~for /hasheq)
 (mk~for /hasheqv)
-(mk~for /hashalw)
+(do-if-for/hashalw-available
+ (mk~for /hashalw))
 
 (mk~for /fold accums)
 
-(mk~for /foldr accums)
+(do-if-for/foldr-available
+ (mk~for /foldr accums))
 
 (mk~for /lists accums)
 
