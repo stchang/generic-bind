@@ -415,3 +415,71 @@
 
 ;; empty sequence bindings
 (check-equal? (for/list () 1) (list 1))
+
+(define-check (check-output-equal? thunk expected-output expected-value)
+  (define actual-output 
+    (with-output-to-string
+      (λ () (check-equal? (thunk) expected-value))))
+  (check-equal? actual-output expected-output))
+
+(test-case "for/foldr"
+  (define (in-printing seq)
+    (sequence-map (lambda (v) (println v) v) seq))
+
+  (check-output-equal?
+   (λ ()
+     (for/foldr ([acc '()])
+       ([v (in-printing (in-range 1 4))])
+       (println v)
+       (cons v acc)))
+   "1\n2\n3\n3\n2\n1\n"
+   '(1 2 3))
+
+  (check-output-equal?
+   (λ ()
+     (for/foldr ([acc '()] #:delay)
+       ([v (in-range 1 4)])
+       (printf "--> ~v\n" v)
+       (begin0
+         (cons v (force acc))
+         (printf "<-- ~v\n" v))))
+   "--> 1\n--> 2\n--> 3\n<-- 3\n<-- 2\n<-- 1\n"
+   '(1 2 3))
+
+  (let ([out (open-output-string)])
+    (define resume
+      (parameterize ([current-output-port out])
+        (for/foldr ([acc '()] #:delay)
+          ([v (in-range 1 5)])
+          (printf "--> ~v\n" v)
+          (begin0
+            (cond
+              [(= v 1) (force acc)]
+              [(= v 2) acc]
+              [else    (cons v (force acc))])
+            (printf "<-- ~v\n" v)))))
+    (check-pred promise? resume)
+    (check-equal? (get-output-string out)
+                  "--> 1\n--> 2\n<-- 2\n<-- 1\n")
+    (check-output-equal? (λ () (force resume))
+                         "--> 3\n--> 4\n<-- 4\n<-- 3\n"
+                         '(3 4)))
+
+  (define squares (for/foldr ([s empty-stream] #:delay)
+                    ([n (in-naturals)])
+                    (stream-cons (* n n) (force s))))
+  (check-equal? (stream->list (stream-take squares 10))
+                '(0 1 4 9 16 25 36 49 64 81))
+
+  (let ([evaluated-yet? #f])
+    (for/foldr ([acc (set! evaluated-yet? #t)] #:delay) ()
+      (force acc))
+    (check-true evaluated-yet?))
+
+  (let ([evaluated-yet? #f])
+    (define start
+      (for/foldr ([acc (set! evaluated-yet? #t)] #:delay #:result acc) ()
+        (force acc)))
+    (check-false evaluated-yet?)
+    (force start)
+    (check-true evaluated-yet?)))
