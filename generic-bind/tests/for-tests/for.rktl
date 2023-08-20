@@ -377,11 +377,11 @@
                 (values v v)))
 
 (do-if-for/hashalw-available
- (test #hashalw((a . 1) (b . 2) (c . 3)) 'mk-hashalw
+ (test (hashalw 'a 1 'b 2 'c 3) 'mk-hashalw
        (for/hashalw ([v (in-naturals)]
                      [k '(a b c)])
          (values k (add1 v))))
- (test #hashalw((a . 3) (b . 3) (c . 3)) 'mk-hashalw
+ (test (hashalw 'a 3 'b 3 'c 3) 'mk-hashalw
        (for*/hashalw ([k '(a b c)]
                       [v (in-range 3)])
          (values k (add1 v)))))
