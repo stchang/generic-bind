@@ -28,7 +28,7 @@
 
 (define-syntax do-if-for/foldr-available
   (lambda (stx)
-    (if for/hashalw-available?
+    (if for/foldr-available?
         (syntax-case stx ()
           [(_ stuff ...) #'(begin stuff ...)])
         #'(begin))))
