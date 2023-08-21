@@ -84,9 +84,18 @@
 (define syntax-local-match-introduce-available?
   (not (eq? syntax-local-match-introduce-2 syntax-local-match-introduce-fallback)))
 
-(define struct/contract-available?
+(define (module-export-available? mod sym)
   (let-values ([(vars stxs)
                 (parameterize ([current-namespace (make-base-namespace)])
-                  (eval '(require racket/contract/region))
-                  (module->exports 'racket/contract/region))])
-    (ormap (λ (e) (eq? 'struct/contract (car e))) (cdr (assoc 0 stxs)))))
+                  (eval `(require ,mod))
+                  (module->exports mod))])
+    (ormap (λ (e) (eq? sym (car e))) (cdr (assoc 0 stxs)))))
+
+(define struct/contract-available?
+  (module-export-available? 'racket/contract/region 'struct/contract))
+
+(define for/foldr-available?
+  (module-export-available? 'racket/base 'for/foldr))
+
+(define for/hashalw-available?
+  (module-export-available? 'racket/base 'for/hashalw))

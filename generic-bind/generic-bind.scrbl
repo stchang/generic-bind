@@ -452,6 +452,9 @@ All the forms in this section are the same as their Racket counterparts (see @ra
 @defform[(~for/lists ...)]{}
 @defform[(~for/vector ...)]{}
 @defform[(~for/fold ...)]{Allows generic binds in sequence clauses, not accumulator clauses.}
+@do-if-for/foldr-available[
+ @defform[(~for/foldr ...)]{Allows generic binds in sequence clauses, not accumulator clauses.}]
+
 @defform[(~for/first ...)]{}
 @defform[(~for/last ...)]{}
 @defform[(~for/or ...)]{}
@@ -461,12 +464,17 @@ All the forms in this section are the same as their Racket counterparts (see @ra
 @defform[(~for/hash ...)]{}
 @defform[(~for/hasheq ...)]{}
 @defform[(~for/hasheqv ...)]{}
+@do-if-for/hashalw-available[
+ @defform[(~for/hashalw ...)]{}]
 
 @defform[(~for* ...)]{}
 @defform[(~for*/list ...)]{}
 @defform[(~for*/lists ...)]{}
 @defform[(~for*/vector ...)]{}
 @defform[(~for*/fold ...)]{Allows generic binds in sequence clauses, not accumulator clauses.}
+@do-if-for/foldr-available[
+ @defform[(~for*/foldr ...)]{Allows generic binds in sequence clauses, not accumulator clauses.}]
+
 @defform[(~for*/first ...)]{}
 @defform[(~for*/last ...)]{}
 @defform[(~for*/or ...)]{}
@@ -476,6 +484,8 @@ All the forms in this section are the same as their Racket counterparts (see @ra
 @defform[(~for*/hash ...)]{}
 @defform[(~for*/hasheq ...)]{}
 @defform[(~for*/hasheqv ...)]{}
+@do-if-for/hashalw-available[
+ @defform[(~for*/hashalw ...)]{}]
 
 @examples[#:eval the-eval
 (~for/list ([($ (list x y)) '((1 2) (3 4) (5 6))]) (list y x));
